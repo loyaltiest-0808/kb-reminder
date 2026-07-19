@@ -194,26 +194,48 @@ def score_one(title, tags):
 # 听脑AI 自动重命名
 # ═══════════════════════════════════════════
 
+TINGNAO_WAIT_SECONDS = 15  # 等待听脑AI内容加载的时间（秒）
+
+
 def is_tingnao_item(title):
     """判断是否为听脑AI自动命名的条目"""
     return "听脑AI" in title
 
 
+def is_tingnao_new(item):
+    """判断是否为新入库的听脑AI条目（标题原始、无标签或标签少）"""
+    title = item.get("title", "")
+    tags = item.get("tags", [])
+    return is_tingnao_item(title) and len(tags) <= 1
+
+
+def fetch_item_summary(kb_id, media_id):
+    """通过 search_knowledge 获取单条内容的摘要"""
+    resp = ima_api("openapi/wiki/v1/search_knowledge", {
+        "knowledge_base_id": kb_id,
+        "query": media_id,
+        "cursor": "",
+        "limit": 5
+    })
+    items = resp.get("data", {}).get("knowledge_list", [])
+    for item in items:
+        if item.get("media_id") == media_id:
+            return item.get("summary", "")
+    return ""
+
+
 def generate_real_title(summary, media_id):
     """根据摘要生成真实标题（防重名）"""
     if not summary or len(summary.strip()) < 10:
-        # 内容为空或太短，无法生成有意义的标题
         return None
 
-    # 从摘要中提取核心主题（取前30个字作为标题基础）
-    # 去掉开头的"该报告是"、"本文是"等前缀
     clean = summary.strip()
     for prefix in ["该报告是", "本文是", "该文章", "这篇"]:
         if clean.startswith(prefix):
             clean = clean[len(prefix):]
             break
 
-    # 取第一个句号前的内容作为标题
+    # 取第一个句号前的内容
     if "。" in clean:
         title_part = clean.split("。")[0]
     elif "，" in clean:
@@ -221,7 +243,6 @@ def generate_real_title(summary, media_id):
     else:
         title_part = clean[:50]
 
-    # 截断到合理长度
     if len(title_part) > 40:
         title_part = title_part[:40]
 
@@ -239,29 +260,69 @@ def rename_knowledge_item(kb_id, media_id, new_name):
 
 
 def handle_tingnao_items(kb_items):
-    """处理听脑AI条目：检测并自动重命名"""
-    tingnao_items = [item for item in kb_items if is_tingnao_item(item.get("title", ""))]
+    """处理新入库的听脑AI条目：等待内容加载 → 读取摘要 → 自动重命名"""
+    tingnao_new = [item for item in kb_items if is_tingnao_new(item)]
 
-    if not tingnao_items:
+    if not tingnao_new:
         return
 
-    print(f"\n🔍 发现 {len(tingnao_items)} 条听脑AI条目，尝试自动重命名...")
+    print(f"\n🔍 发现 {len(tingnao_new)} 条新听脑AI条目，等待内容加载（{TINGNAO_WAIT_SECONDS}秒）...")
 
+    # 第一轮：立即尝试（有些可能已经加载好了）
     renamed = 0
-    for item in tingnao_items:
+    pending = []
+    for item in tingnao_new:
         media_id = item.get("media_id", "")
         old_title = item.get("title", "")
         summary = item.get("summary", "")
 
+        # 如果 summary 字段为空，尝试通过 search_knowledge 获取
+        if not summary:
+            summary = fetch_item_summary(KB_ID, media_id)
+
         new_title = generate_real_title(summary, media_id)
         if new_title and new_title != old_title:
             if rename_knowledge_item(KB_ID, media_id, new_title):
-                print(f"  ✅ {old_title[:20]}... → {new_title[:40]}")
+                print(f"  ✅ {new_title[:40]}")
                 renamed += 1
             else:
                 print(f"  ❌ 重命名失败: {new_title[:40]}")
+        else:
+            pending.append(item)
 
-    print(f"  听脑AI重命名完成: {renamed}/{len(tingnao_items)}")
+    if not pending:
+        print(f"  听脑AI重命名完成: {renamed}/{len(tingnao_new)}")
+        return
+
+    # 第二轮：等待后重试
+    print(f"  ⏳ {len(pending)} 条内容未就绪，等待 {TINGNAO_WAIT_SECONDS} 秒...")
+    time.sleep(TINGNAO_WAIT_SECONDS)
+
+    # 重新获取知识库列表（内容可能已加载）
+    kb_items_refreshed = get_all_items(KB_ID)
+    tingnao_refreshed = {item.get("media_id"): item for item in kb_items_refreshed if is_tingnao_item(item.get("title", ""))}
+
+    for item in pending:
+        media_id = item.get("media_id", "")
+        old_title = item.get("title", "")
+
+        # 用刷新后的数据
+        refreshed = tingnao_refreshed.get(media_id, item)
+        summary = refreshed.get("summary", "")
+        if not summary:
+            summary = fetch_item_summary(KB_ID, media_id)
+
+        new_title = generate_real_title(summary, media_id)
+        if new_title and new_title != old_title:
+            if rename_knowledge_item(KB_ID, media_id, new_title):
+                print(f"  ✅ (延迟) {new_title[:40]}")
+                renamed += 1
+            else:
+                print(f"  ❌ (延迟) 重命名失败: {new_title[:40]}")
+        else:
+            print(f"  ⏭️ 内容仍未就绪，跳过: {old_title[:30]}...")
+
+    print(f"  听脑AI重命名完成: {renamed}/{len(tingnao_new)}")
 
 
 # ═══════════════════════════════════════════
