@@ -24,6 +24,10 @@ DAILY_LOG_NOTE_ID = "7483148258522158"
 SYSTEM_STATUS_NOTE_ID = "7483148258537130"
 
 BASE_URL = "https://ima.qq.com"
+FEISHU_WEBHOOK = os.environ.get(
+    "FEISHU_WEBHOOK",
+    "https://open.feishu.cn/open-apis/bot/v2/hook/ac6ae40e-9cfd-411d-bda4-44d2d16fbf30"
+)
 TODAY = datetime.now().strftime("%Y-%m-%d")
 NOW_STR = datetime.now().strftime("%Y-%m-%d %H:%M")
 
@@ -92,6 +96,43 @@ def ima_api(path, body):
     if data.get("code") != 0:
         print(f"⚠️ API 错误 [{path}]: {data.get('msg', '未知错误')}")
     return data
+
+
+def feishu_notify(title, content_lines):
+    """发送飞书机器人通知"""
+    import requests
+    if not FEISHU_WEBHOOK:
+        print("⚠️ 未配置飞书 Webhook，跳过通知")
+        return
+
+    # 构造飞书富文本消息
+    elements = []
+    for line in content_lines:
+        elements.append({"tag": "div", "text": {"tag": "plain_text", "content": line}})
+
+    card = {
+        "msg_type": "interactive",
+        "card": {
+            "header": {
+                "title": {"tag": "plain_text", "content": title},
+                "template": "blue"
+            },
+            "elements": elements
+        }
+    }
+
+    try:
+        resp = requests.post(FEISHU_WEBHOOK, json=card, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("code") == 0:
+                print("✅ 飞书通知已发送")
+            else:
+                print(f"⚠️ 飞书通知失败: {data.get('msg', '未知错误')}")
+        else:
+            print(f"⚠️ 飞书通知 HTTP 错误: {resp.status_code}")
+    except Exception as e:
+        print(f"⚠️ 飞书通知异常: {e}")
 
 
 # ═══════════════════════════════════════════
@@ -328,6 +369,17 @@ def run_daily_inventory():
 
     print(f"📁 评分档案已保存: outputs/evaluation_{TODAY}.json")
 
+    # 12. 飞书通知
+    feishu_lines = [
+        f"⏰ 时间: {NOW_STR}",
+        f"📊 知识库总条目: {len(kb_titles)}",
+        f"🆕 本次新增处理: {len(results)} 条",
+        f"🏷️ 打标签: {tag_count} 个",
+        f"📈 均分: {avg_score}/10",
+        f"🏆 TOP1: {results[0]['title'][:40]} ({results[0]['total']})",
+    ]
+    feishu_notify("📋 每日盘点完成", feishu_lines)
+
 
 def build_daily_log(results, avg_score):
     """构建每日盘点日志 markdown"""
@@ -405,6 +457,17 @@ def run_weekly_review():
 
     print(f"✅ 周回顾完成")
 
+    # 飞书通知
+    feishu_lines = [
+        f"⏰ 时间: {NOW_STR}",
+        f"📊 知识库总条目: {len(kb_items)}",
+        f"🏷️ 标签类别数: {len(tag_dist)}",
+        f"📋 TOP3标签: " + " / ".join(
+            f"{tag}({cnt})" for tag, cnt in sorted(tag_dist.items(), key=lambda x: -x[1])[:3]
+        ),
+    ]
+    feishu_notify("📊 周回顾完成", feishu_lines)
+
 
 # ═══════════════════════════════════════════
 # 月度分析
@@ -458,6 +521,14 @@ def run_monthly_analysis():
     update_status("最后月度分析时间", NOW_STR)
 
     print(f"✅ 月度分析完成")
+
+    # 飞书通知
+    feishu_lines = [
+        f"⏰ 时间: {NOW_STR}",
+        f"📊 知识库总条目: {len(kb_items)}",
+        f"📝 已评分: {scored_count} 条",
+    ]
+    feishu_notify("📈 月度分析完成", feishu_lines)
 
 
 # ═══════════════════════════════════════════
