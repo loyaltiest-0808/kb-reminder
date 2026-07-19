@@ -41,6 +41,7 @@ TAG_KEYWORDS = {
     "深度学习选股": ["深度学习", "神经网络", "GRU", "LSTM", "Transformer选股", "时序模型"],
     "风险管理": ["风险因子", "风险控制", "特质风险", "共同风险", "风险管理"],
     "基本面量化": ["基本面", "财务", "财报", "EP因子", "估值因子", "质量因子"],
+    "AI编程工具": ["编程", "代码", "编码", "Copilot", "CloudCode", "Cloud Code", "Cloud", "AI工具", "工具教程", "工具分享", "工具介绍", "工具教学", "开源项目", "第二大脑", "Claude", "AI员工", "AI代理", "Agent", "WQ-Alpha", "约束规则"],
     "量化综合": ["量化", "策略", "回测", "因子", "实证"],
     "指数增强": ["指数增强", "增强策略", "跟踪误差"],
     "ETF策略": ["ETF", "交易型开放式"],
@@ -51,7 +52,6 @@ TAG_KEYWORDS = {
     "风格轮动": ["风格轮动", "大小盘"],
     "红利策略": ["红利", "分红", "股息"],
     "数字货币与DeFi": ["数字货", "BTC", "ETH", "DeFi"],
-    "AI编程工具": ["编程", "代码", "编码", "Copilot"],
     "知识库管理": ["知识库", "知识管理", "笔记"],
 }
 
@@ -142,15 +142,31 @@ def feishu_notify(title, content_lines):
 def classify_title(title):
     """根据标题关键词匹配标签，返回匹配的标签列表"""
     title_lower = title.lower()
+    
+    # 先找出所有匹配的具体标签
+    # 排除的"量化综合"作为兜底标签
+    specific_tags = {k: v for k, v in TAG_KEYWORDS.items() if k != "量化综合"}
+    fallback_tag = TAG_KEYWORDS.get("量化综合", [])
+    
     matched = []
-    for tag, keywords in TAG_KEYWORDS.items():
+    for tag, keywords in specific_tags.items():
         for kw in keywords:
             if kw.lower() in title_lower:
                 matched.append(tag)
                 break
-    # 兜底：如果没有任何标签匹配，归为"量化综合"
+
+    # 如果有具体标签匹配，不加"量化综合"
+    # 如果没有任何标签匹配，用"量化综合"兜底
+    if not matched:
+        for kw in fallback_tag:
+            if kw.lower() in title_lower:
+                matched.append("量化综合")
+                break
+    
+    # 最终兜底
     if not matched:
         matched = ["量化综合"]
+
     return matched
 
 
