@@ -278,7 +278,7 @@ def get_knowledge_list(kb_id, folder_id="", cursor="", limit=50):
 
 
 def get_all_items(kb_id, folder_id=""):
-    """翻页获取全部条目"""
+    """翻页获取全部条目（根目录 + 子文件夹）"""
     all_items = []
     cursor = ""
     while True:
@@ -289,6 +289,13 @@ def get_all_items(kb_id, folder_id=""):
             break
         cursor = result.get("next_cursor", "")
         time.sleep(0.5)
+
+    # 递归获取子文件夹内容
+    subfolders = [item for item in all_items if item.get("media_type") == 99]
+    for folder in subfolders:
+        sub_items = get_all_items(kb_id, folder.get("media_id", ""))
+        all_items.extend(sub_items)
+
     return all_items
 
 
