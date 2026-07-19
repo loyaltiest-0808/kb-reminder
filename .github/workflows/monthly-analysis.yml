@@ -1,0 +1,26 @@
+name: 月度分析
+
+on:
+  schedule:
+    - cron: '0 20 28-31 * 6'  # 月末周六 20:00 UTC+8
+  workflow_dispatch:
+
+jobs:
+  monthly-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+
+      - name: 执行月度分析
+        env:
+          IMA_OPENAPI_CLIENTID: ${{ secrets.IMA_OPENAPI_CLIENTID }}
+          IMA_OPENAPI_APIKEY: ${{ secrets.IMA_OPENAPI_APIKEY }}
+        run: python kb_reminder.py monthly
