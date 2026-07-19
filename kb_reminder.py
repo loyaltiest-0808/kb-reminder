@@ -191,6 +191,80 @@ def score_one(title, tags):
 
 
 # ═══════════════════════════════════════════
+# 听脑AI 自动重命名
+# ═══════════════════════════════════════════
+
+def is_tingnao_item(title):
+    """判断是否为听脑AI自动命名的条目"""
+    return "听脑AI" in title
+
+
+def generate_real_title(summary, media_id):
+    """根据摘要生成真实标题（防重名）"""
+    if not summary or len(summary.strip()) < 10:
+        # 内容为空或太短，无法生成有意义的标题
+        return None
+
+    # 从摘要中提取核心主题（取前30个字作为标题基础）
+    # 去掉开头的"该报告是"、"本文是"等前缀
+    clean = summary.strip()
+    for prefix in ["该报告是", "本文是", "该文章", "这篇"]:
+        if clean.startswith(prefix):
+            clean = clean[len(prefix):]
+            break
+
+    # 取第一个句号前的内容作为标题
+    if "。" in clean:
+        title_part = clean.split("。")[0]
+    elif "，" in clean:
+        title_part = clean.split("，")[0]
+    else:
+        title_part = clean[:50]
+
+    # 截断到合理长度
+    if len(title_part) > 40:
+        title_part = title_part[:40]
+
+    return title_part.strip()
+
+
+def rename_knowledge_item(kb_id, media_id, new_name):
+    """重命名知识库条目"""
+    resp = ima_api("openapi/wiki/v1/rename_knowledge", {
+        "knowledge_base_id": kb_id,
+        "media_id": media_id,
+        "name": new_name
+    })
+    return resp.get("code", -1) == 0
+
+
+def handle_tingnao_items(kb_items):
+    """处理听脑AI条目：检测并自动重命名"""
+    tingnao_items = [item for item in kb_items if is_tingnao_item(item.get("title", ""))]
+
+    if not tingnao_items:
+        return
+
+    print(f"\n🔍 发现 {len(tingnao_items)} 条听脑AI条目，尝试自动重命名...")
+
+    renamed = 0
+    for item in tingnao_items:
+        media_id = item.get("media_id", "")
+        old_title = item.get("title", "")
+        summary = item.get("summary", "")
+
+        new_title = generate_real_title(summary, media_id)
+        if new_title and new_title != old_title:
+            if rename_knowledge_item(KB_ID, media_id, new_title):
+                print(f"  ✅ {old_title[:20]}... → {new_title[:40]}")
+                renamed += 1
+            else:
+                print(f"  ❌ 重命名失败: {new_title[:40]}")
+
+    print(f"  听脑AI重命名完成: {renamed}/{len(tingnao_items)}")
+
+
+# ═══════════════════════════════════════════
 # 核心业务逻辑
 # ═══════════════════════════════════════════
 
@@ -276,6 +350,13 @@ def run_daily_inventory():
 
     # 2. 获取知识库全部条目（含文件夹）
     kb_items = get_all_items(KB_ID)
+
+    # 2.5 自动处理听脑AI条目（重命名）
+    handle_tingnao_items(kb_items)
+
+    # 重新获取（重命名后刷新）
+    kb_items = get_all_items(KB_ID)
+
     kb_titles = {}
     for item in kb_items:
         mid = item.get("media_id", "")
