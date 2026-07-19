@@ -282,8 +282,9 @@ def run_daily_inventory():
         title = item.get("title", "")
         tags = item.get("tags", [])
         parent_folder = item.get("parent_folder_id", "")
+        media_type = item.get("media_type", 0)
         if mid:
-            kb_titles[mid] = {"title": title, "tags": tags, "folder": parent_folder}
+            kb_titles[mid] = {"title": title, "tags": tags, "folder": parent_folder, "media_type": media_type}
 
     print(f"知识库总条目: {len(kb_titles)}")
 
@@ -291,10 +292,12 @@ def run_daily_inventory():
     dl_items = get_all_items(KB_ID, DOWNLOADS_FOLDER_ID)
     print(f"Downloads 文件夹: {len(dl_items)} 个文件")
 
-    # 4. 识别未处理条目（在知识库中但不在 Downloads 文件夹，且未打标签）
+    # 4. 识别未处理条目（在知识库中且未打标签，排除文件夹）
     #    策略：找出所有没有标签的条目，它们需要被打标签+评分
     untagged = []
     for mid, info in kb_titles.items():
+        if info["media_type"] == 99:  # 跳过文件夹（media_type=99）
+            continue
         if not info["tags"]:  # 没有标签 = 未处理
             untagged.append({"media_id": mid, "title": info["title"], "folder": info["folder"]})
 
