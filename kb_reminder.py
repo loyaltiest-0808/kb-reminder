@@ -421,38 +421,89 @@ def build_daily_log(results, avg_score):
 # ═══════════════════════════════════════════
 
 def run_weekly_review():
-    """周回顾：汇总本周入库情况"""
+    """周回顾：随机推送3条已入库知识做回顾"""
+    import random
     print(f"\n{'='*60}")
     print(f"📊 周回顾 — {NOW_STR}")
     print(f"{'='*60}")
 
-    # 读取本周盘点日志
-    log_content = get_note_content(DAILY_LOG_NOTE_ID)
-
     # 获取当前知识库状态
     kb_items = get_all_items(KB_ID)
 
-    # 统计标签分布
-    tag_dist = {}
+    # 过滤出有标签的条目（排除文件夹）
+    tag_items = []
     for item in kb_items:
-        for tag in item.get("tags", []):
-            tag_dist[tag] = tag_dist.get(tag, 0) + 1
+        if item.get("media_type") == 99:  # 跳过文件夹
+            continue
+        tags = item.get("tags", [])
+        if tags:
+            tag_items.append(item)
 
+    print(f"知识库总条目: {len(kb_items)} | 有标签条目: {len(tag_items)}")
+
+    if not tag_items:
+        summary = f"✅ 周回顾完成 ({NOW_STR}): 知识库暂无有标签条目。"
+        append_note(DAILY_LOG_NOTE_ID, f"\n## {TODAY} 周回顾\n\n{summary}\n")
+        update_status("最后周回顾时间", NOW_STR)
+        feishu_notify("📊 周回顾完成", [summary])
+        return
+
+    # 随机抽取3条（尽量跨标签）
+    random.seed(int(TODAY.replace("-", "")))  # 同一天结果固定，可复现
+    if len(tag_items) <= 3:
+        selected = tag_items[:]
+    else:
+        # 尝试跨标签抽取：每条来自不同标签
+        tag_groups = {}
+        for item in tag_items:
+            primary_tag = item.get("tags", ["其他"])[0]
+            if primary_tag not in tag_groups:
+                tag_groups[primary_tag] = []
+            tag_groups[primary_tag].append(item)
+
+        selected = []
+        available_tags = list(tag_groups.keys())
+        random.shuffle(available_tags)
+        for tag in available_tags:
+            if len(selected) >= 3:
+                break
+            items = tag_groups[tag]
+            selected.append(random.choice(items))
+
+        # 如果不够3条，从剩余中补
+        if len(selected) < 3:
+            remaining = [i for i in tag_items if i not in selected]
+            if remaining:
+                need = 3 - len(selected)
+                selected.extend(random.sample(remaining, min(need, len(remaining))))
+
+    print(f"随机抽取 {len(selected)} 条知识做回顾")
+
+    # 构建笔记内容
     lines = [f"\n## {TODAY} 周回顾\n"]
-    lines.append(f"回顾时间: {NOW_STR}\n")
+    lines.append(f"回顾时间: {NOW_STR}")
+    lines.append(f"知识库总条目: {len(kb_items)} | 有标签: {len(tag_items)}\n")
+    lines.append("### 🎯 本周精选回顾（随机抽取 3 条）\n")
 
-    lines.append("### 本周知识库概况\n")
-    lines.append(f"- 知识库总条目: {len(kb_items)}")
-    lines.append(f"- 标签类别数: {len(tag_dist)}\n")
+    for i, item in enumerate(selected, 1):
+        title = item.get("title", "未知标题")
+        tags = item.get("tags", [])
+        tags_str = " / ".join(tags)
+        dims, total = score_one(title, tags)
 
-    lines.append("### 标签分布\n")
-    lines.append("|标签|条目数|")
-    lines.append("|---|---|")
-    for tag, count in sorted(tag_dist.items(), key=lambda x: -x[1]):
-        lines.append(f"|{tag}|{count}|")
+        # 清洗标题：去掉日期前缀和券商名
+        clean_title = title
+        for prefix in ["20250", "2024", "2023"]:
+            if clean_title.startswith(prefix):
+                parts = clean_title.split("-", 2)
+                if len(parts) >= 3:
+                    clean_title = parts[2]
+                    break
 
-    lines.append("\n### 本周事件\n")
-    lines.append(f"- {TODAY}: 周回顾自动执行")
+        lines.append(f"**{i}. {clean_title}**")
+        lines.append(f"   - 标签: {tags_str}")
+        lines.append(f"   - 评分: {total}/10 (深度{dims['depth']} 数据{dims['data']} 逻辑{dims['logic']} 实用{dims['practical']} 创新{dims['innovation']})")
+        lines.append("")
 
     content = "\n".join(lines)
     append_note(DAILY_LOG_NOTE_ID, content)
@@ -463,13 +514,25 @@ def run_weekly_review():
     # 飞书通知
     feishu_lines = [
         f"⏰ 时间: {NOW_STR}",
-        f"📊 知识库总条目: {len(kb_items)}",
-        f"🏷️ 标签类别数: {len(tag_dist)}",
-        f"📋 TOP3标签: " + " / ".join(
-            f"{tag}({cnt})" for tag, cnt in sorted(tag_dist.items(), key=lambda x: -x[1])[:3]
-        ),
+        f"📊 知识库总条目: {len(kb_items)} | 有标签: {len(tag_items)}",
+        "",
+        "🎯 本周精选回顾：",
     ]
-    feishu_notify("📊 周回顾完成", feishu_lines)
+    for i, item in enumerate(selected, 1):
+        title = item.get("title", "")
+        tags = item.get("tags", [])
+        dims, total = score_one(title, tags)
+        # 清洗标题
+        clean = title
+        for prefix in ["20250", "2024", "2023"]:
+            if clean.startswith(prefix):
+                parts = clean.split("-", 2)
+                if len(parts) >= 3:
+                    clean = parts[2]
+                    break
+        feishu_lines.append(f"{i}. {clean[:40]} ({tags[0]}) ⭐{total}")
+
+    feishu_notify("📊 周回顾 · 本周精选", feishu_lines)
 
 
 # ═══════════════════════════════════════════
@@ -477,47 +540,104 @@ def run_weekly_review():
 # ═══════════════════════════════════════════
 
 def run_monthly_analysis():
-    """月度分析：全量知识库评分与分析"""
+    """月度分析：随机推送一个大类的知识框架"""
+    import random
     print(f"\n{'='*60}")
     print(f"📈 月度分析 — {NOW_STR}")
     print(f"{'='*60}")
 
     kb_items = get_all_items(KB_ID)
 
-    # 统计
-    tag_dist = {}
-    tag_scores = {}
-    scored_count = 0
-
+    # 按标签分组（排除文件夹）
+    tag_groups = {}
     for item in kb_items:
-        title = item.get("title", "")
+        if item.get("media_type") == 99:
+            continue
         tags = item.get("tags", [])
         for tag in tags:
-            tag_dist[tag] = tag_dist.get(tag, 0) + 1
-            if tag not in tag_scores:
-                tag_scores[tag] = []
+            if tag not in tag_groups:
+                tag_groups[tag] = []
+            tag_groups[tag].append(item)
 
-        if tags:
-            scored_count += 1
-            dims, total = score_one(title, tags)
-            for tag in tags:
-                tag_scores[tag].append(total)
+    if not tag_groups:
+        summary = f"✅ 月度分析完成 ({NOW_STR}): 知识库暂无有标签条目。"
+        append_note(DAILY_LOG_NOTE_ID, f"\n## {TODAY} 月度分析\n\n{summary}\n")
+        update_status("最后月度分析时间", NOW_STR)
+        feishu_notify("📈 月度分析完成", [summary])
+        return
 
+    # 随机选一个大类
+    random.seed(int(TODAY.replace("-", "")))
+    selected_tag = random.choice(list(tag_groups.keys()))
+    selected_items = tag_groups[selected_tag]
+
+    # 按评分排序
+    for item in selected_items:
+        title = item.get("title", "")
+        tags = item.get("tags", [])
+        _, total = score_one(title, tags)
+        item["_score"] = total
+    selected_items.sort(key=lambda x: -x["_score"])
+
+    print(f"随机选中大类: {selected_tag} ({len(selected_items)} 条)")
+
+    # 构建知识框架
     lines = [f"\n## {TODAY} 月度分析\n"]
     lines.append(f"分析时间: {NOW_STR}")
-    lines.append(f"知识库总条目: {len(kb_items)}")
-    lines.append(f"已评分条目: {scored_count}\n")
+    lines.append(f"知识库总条目: {len(kb_items)} | 标签类别: {len(tag_groups)}\n")
 
-    lines.append("### 标签分布与均分\n")
-    lines.append("|标签|条目数|均分|")
-    lines.append("|---|---|---|")
-    for tag in sorted(tag_dist.keys(), key=lambda x: -tag_dist[x]):
-        scores = tag_scores.get(tag, [])
-        avg = round(mean(scores), 2) if scores else "-"
-        lines.append(f"|{tag}|{tag_dist[tag]}|{avg}|")
+    lines.append(f"### 📚 本月聚焦: {selected_tag}（共 {len(selected_items)} 条）\n")
 
-    lines.append("\n### 本月事件\n")
-    lines.append(f"- {TODAY}: 月度分析自动执行")
+    # 统计该类均分
+    scores = [item["_score"] for item in selected_items]
+    avg = round(mean(scores), 2)
+    lines.append(f"**类别均分: {avg}/10**\n")
+
+    # 展示框架：按评分分层
+    lines.append("#### 知识框架\n")
+    lines.append("|#|标题|评分|标签|")
+    lines.append("|---|---|---|---|")
+    for i, item in enumerate(selected_items[:15], 1):  # 最多展示15条
+        title = item.get("title", "")
+        tags = " / ".join(item.get("tags", []))
+        # 清洗标题
+        clean = title
+        for prefix in ["20250", "2024", "2023"]:
+            if clean.startswith(prefix):
+                parts = clean.split("-", 2)
+                if len(parts) >= 3:
+                    clean = parts[2]
+                    break
+        lines.append(f"|{i}|{clean[:50]}|{item['_score']}|{tags}|")
+
+    if len(selected_items) > 15:
+        lines.append(f"\n> 还有 {len(selected_items) - 15} 条未展示")
+
+    # 核心主题提炼
+    lines.append(f"\n#### 核心主题\n")
+    titles_clean = []
+    for item in selected_items[:10]:
+        t = item.get("title", "")
+        for prefix in ["20250", "2024", "2023"]:
+            if t.startswith(prefix):
+                parts = t.split("-", 2)
+                if len(parts) >= 3:
+                    t = parts[2]
+                    break
+        titles_clean.append(t)
+
+    # 提取共同关键词
+    all_words = " ".join(titles_clean)
+    lines.append(f"本类知识覆盖 {len(selected_items)} 篇研报，TOP3 高分:")
+    for item in selected_items[:3]:
+        t = item.get("title", "")
+        for prefix in ["20250", "2024", "2023"]:
+            if t.startswith(prefix):
+                parts = t.split("-", 2)
+                if len(parts) >= 3:
+                    t = parts[2]
+                    break
+        lines.append(f"- {t[:60]}")
 
     content = "\n".join(lines)
     append_note(DAILY_LOG_NOTE_ID, content)
@@ -528,10 +648,24 @@ def run_monthly_analysis():
     # 飞书通知
     feishu_lines = [
         f"⏰ 时间: {NOW_STR}",
-        f"📊 知识库总条目: {len(kb_items)}",
-        f"📝 已评分: {scored_count} 条",
+        f"📊 知识库总条目: {len(kb_items)} | 标签类别: {len(tag_groups)}",
+        "",
+        f"📚 本月聚焦: {selected_tag}",
+        f"   共 {len(selected_items)} 条 | 均分 {avg}/10",
+        "",
+        "🏆 TOP3 高分研报：",
     ]
-    feishu_notify("📈 月度分析完成", feishu_lines)
+    for i, item in enumerate(selected_items[:3], 1):
+        t = item.get("title", "")
+        for prefix in ["20250", "2024", "2023"]:
+            if t.startswith(prefix):
+                parts = t.split("-", 2)
+                if len(parts) >= 3:
+                    t = parts[2]
+                    break
+        feishu_lines.append(f"  {i}. {t[:45]} ⭐{item['_score']}")
+
+    feishu_notify("📈 月度分析 · 知识框架", feishu_lines)
 
 
 # ═══════════════════════════════════════════
