@@ -175,23 +175,6 @@ def update_status(f, v):
     append_note(SYSTEM_STATUS_NOTE_ID, f"\n{TODAY} - {f}: {v}")
     print(f"状态: {f} = {v}")
 
-# ==================== 听脑AI ====================
-def handle_tingnao(items):
-    new = [i for i in items if any(k in i.get("title","").lower() for k in ["听脑ai","tingnao","脑听"]) and re.search(r"\d{4}[-/]\d", i.get("title",""))]
-    if not new: return
-    print(f"听脑AI: {len(new)}条待重命名")
-    for i in new:
-        mid, old = i.get("media_id",""), i.get("title","")
-        sm = i.get("summary","") or fetch_content(KB_ID, mid)
-        if not sm or len(sm.strip())<5: continue
-        if llm_ok():
-            new_t = ds_chat("提炼10-25字标题，只返回标题", f"摘要：\n{sm[:1000]}", max_tk=100)
-            new_t = new_t.strip()[:50] if new_t and len(new_t.strip())>5 else sm.strip()[:20]
-        else:
-            new_t = sm.strip().replace("\n"," ")[:20]
-        if new_t and new_t!=old:
-            rename_item(KB_ID, mid, new_t); print(f"  {new_t[:40]}")
-
 # ==================== 核心入库 ====================
 def build_log(results, avg, llm_on):
     l = [f"\n## {TODAY} 每日盘点\n", f"时间: {NOW} | 模式: {'LLM' if llm_on else '规则'}", f"新增: {len(results)}条 | 均分: {avg}/10\n"]
@@ -204,8 +187,6 @@ def build_log(results, avg, llm_on):
 
 def daily():
     print(f"\n{'='*60}\n每日盘点 — {NOW} [{'LLM' if llm_ok() else '规则'}]\n{'='*60}")
-    items = list_items(KB_ID)
-    handle_tingnao(items)
     items = list_items(KB_ID)
     
     # 获取 Downloads 文件夹条目（研报入库来源）
