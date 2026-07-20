@@ -1,7 +1,7 @@
 name: 每日盘点
 on:
   schedule:
-    - cron: '0 21 * * *'
+    - cron: '0 13 * * *'
   workflow_dispatch:
 jobs:
   daily-inventory:
@@ -24,3 +24,4 @@ jobs:
         with:
           name: eval-${{ github.run_id }}
           path: outputs/
+
