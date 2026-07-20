@@ -1,7 +1,7 @@
 name: 月度分析
 on:
   schedule:
-    - cron: '0 20 28-31 * 6'
+    - cron: '0 12 28-31 * 6'
   workflow_dispatch:
 jobs:
   monthly-analysis:
@@ -18,3 +18,4 @@ jobs:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           USE_LLM_ENHANCE: ${{ vars.USE_LLM_ENHANCE }}
         run: python kb_reminder.py monthly
+
