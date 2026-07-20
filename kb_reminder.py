@@ -207,12 +207,19 @@ def daily():
     items = list_items(KB_ID)
     handle_tingnao(items)
     items = list_items(KB_ID)
+    
+    # 获取 Downloads 文件夹条目（研报入库来源）
+    dl_items = list_items(KB_ID, DOWNLOADS_FOLDER_ID)
+    print(f"根目录: {len(items)} | Downloads: {len(dl_items)}")
+    
+    # 合并根目录 + Downloads 文件夹条目
+    all_items = items + dl_items
     titles = {}
-    for i in items:
-        mid=i.get("media_id","")
-        if mid: titles[mid]={"title":i.get("title",""),"tags":i.get("tags",[]),"mt":i.get("media_type",0)}
-    print(f"总条目: {len(titles)}")
-    print(f"Downloads: {len(list_items(KB_ID, DOWNLOADS_FOLDER_ID))}")
+    for i in all_items:
+        mid = i.get("media_id","")
+        if mid:
+            titles[mid] = {"title":i.get("title",""),"tags":i.get("tags",[]),"mt":i.get("media_type",0)}
+    print(f"去重后总条目: {len(titles)}")
     untagged = [{"media_id":m,"title":v["title"]} for m,v in titles.items() if v["mt"]!=99 and not v["tags"]]
     print(f"未处理: {len(untagged)}")
     if not untagged:
