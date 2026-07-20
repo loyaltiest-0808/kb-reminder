@@ -175,6 +175,23 @@ def update_status(f, v):
     append_note(SYSTEM_STATUS_NOTE_ID, f"\n{TODAY} - {f}: {v}")
     print(f"状态: {f} = {v}")
 
+# ==================== 听脑AI ====================
+def handle_tingnao(items):
+    new = [i for i in items if any(k in i.get("title","").lower() for k in ["听脑ai","tingnao","脑听"]) and re.search(r"\d{4}[-/]\d", i.get("title",""))]
+    if not new: return
+    print(f"听脑AI: {len(new)}条待重命名")
+    for i in new:
+        mid, old = i.get("media_id",""), i.get("title","")
+        sm = i.get("summary","") or fetch_content(KB_ID, mid)
+        if not sm or len(sm.strip())<5: continue
+        if llm_ok():
+            new_t = ds_chat("提炼10-25字标题，只返回标题", f"摘要：\n{sm[:1000]}", max_tk=100)
+            new_t = new_t.strip()[:50] if new_t and len(new_t.strip())>5 else sm.strip()[:20]
+        else:
+            new_t = sm.strip().replace("\n"," ")[:20]
+        if new_t and new_t!=old:
+            rename_item(KB_ID, mid, new_t); print(f"  {new_t[:40]}")
+
 # ==================== 核心入库 ====================
 def build_log(results, avg, llm_on):
     l = [f"\n## {TODAY} 每日盘点\n", f"时间: {NOW} | 模式: {'LLM' if llm_on else '规则'}", f"新增: {len(results)}条 | 均分: {avg}/10\n"]
@@ -188,19 +205,23 @@ def build_log(results, avg, llm_on):
 def daily():
     print(f"\n{'='*60}\n每日盘点 — {NOW} [{'LLM' if llm_ok() else '规则'}]\n{'='*60}")
     items = list_items(KB_ID)
+    handle_tingnao(items)
+    items = list_items(KB_ID)
     
     # 获取 Downloads 文件夹条目（研报入库来源）
     dl_items = list_items(KB_ID, DOWNLOADS_FOLDER_ID)
     print(f"根目录: {len(items)} | Downloads: {len(dl_items)}")
     
-    # 合并根目录 + Downloads 文件夹条目
+    # 合并根目录 + Downloads 文件夹条目，去重
     all_items = items + dl_items
     titles = {}
+    dup = 0
     for i in all_items:
         mid = i.get("media_id","")
         if mid:
+            if mid in titles: dup += 1
             titles[mid] = {"title":i.get("title",""),"tags":i.get("tags",[]),"mt":i.get("media_type",0)}
-    print(f"去重后总条目: {len(titles)}")
+    print(f"去重后总条目: {len(titles)} (去除{dup}条重复)")
     untagged = [{"media_id":m,"title":v["title"]} for m,v in titles.items() if v["mt"]!=99 and not v["tags"]]
     print(f"未处理: {len(untagged)}")
     if not untagged:
@@ -256,35 +277,97 @@ def daily():
 
 def run_nightly(): print(f"夜间入库 — {NOW}"); daily()
 def run_weekly():
-    print(f"\n{'='*60}\n周回顾 — {NOW}\n{'='*60}")
+    print(f"\n{'='*60}\n周回顾 — {NOW} [{'LLM' if llm_ok() else '规则'}]\n{'='*60}")
     kb=list_items(KB_ID); tg=[i for i in kb if i.get("media_type")!=99 and i.get("tags")]
     print(f"总: {len(kb)} | 有标签: {len(tg)}")
     if not tg: return
     sel = random.sample(tg, min(3,len(tg)))
-    l=[f"\n## {TODAY} 周回顾\n时间: {NOW}\n总: {len(kb)} | 有标签: {len(tg)}\n"]
+    l=[f"\n## {TODAY} 周回顾\n时间: {NOW} | 模式: {'LLM' if llm_ok() else '规则'}\n总: {len(kb)} | 有标签: {len(tg)}\n"]
+    llm_on = llm_ok()
     for i,s in enumerate(sel,1):
-        _,sc=score(s.get("title",""), s.get("tags",[]))
-        l.append(f"**{i}. {s['title'][:50]}**\n   标签: {'/'.join(s.get('tags',[]))} | 评分: {sc}/10\n")
+        title = s.get("title",""); tags = s.get("tags",[])
+        if llm_on:
+            content = fetch_content(KB_ID, s.get("media_id",""))
+            ls = llm_score(title, content)
+            if ls: dims, total, rationale = ls
+            else: dims, total = score(title, tags)
+        else:
+            dims, total = score(title, tags)
+        sm = llm_summarize(title, fetch_content(KB_ID, s.get("media_id",""))) if llm_on else ""
+        l.append(f"**{i}. {title[:50]}**\n   标签: {'/'.join(tags)} | 评分: {total}/10 (深度{dims['depth']} 数据{dims['data']} 逻辑{dims['logic']} 实用{dims['practical']} 创新{dims['innovation']})" + (f"\n   📝 {sm[:60]}" if sm else "") + "\n")
     append_note(DAILY_LOG_NOTE_ID, "\n".join(l))
     update_status("最后周回顾时间",NOW)
+    fl = [f"⏰ {NOW}", f"{'LLM' if llm_on else '规则'}模式", f"📊 总: {len(kb)} | 有标签: {len(tg)}"]
+    for i,s in enumerate(sel,1):
+        title = s.get("title","")[:40]
+        tags = s.get("tags",[])
+        _, sc = llm_score(title, "") if llm_on else (None, 0)
+        if not _: _, sc = score(title, tags)
+        fl.append(f"{i}. {title} ⭐{sc}")
+    feishu("📊 周回顾", fl)
 
 def run_monthly():
-    print(f"\n{'='*60}\n月度分析 — {NOW}\n{'='*60}")
-    kb=list_items(KB_ID); grp={}
-    for i in kb:
+    print(f"\n{'='*60}\n月度分析 — {NOW} [{'LLM' if llm_ok() else '规则'}]\n{'='*60}")
+    kb=list_items(KB_ID)
+    # 合并 Downloads
+    dl = list_items(KB_ID, DOWNLOADS_FOLDER_ID)
+    all_i = {}
+    for i in kb + dl:
+        mid = i.get("media_id","")
+        if mid: all_i[mid] = i
+    all_i = list(all_i.values())
+    
+    # 按标签分组
+    grp = {}
+    for i in all_i:
         if i.get("media_type")==99: continue
         for t in i.get("tags",[]):
             if t not in grp: grp[t]=[]
-            d=dict(i); _,sc=score(i.get("title",""),[t]); d["_s"]=sc; grp[t].append(d)
+            d=dict(i)
+            if llm_ok():
+                content = fetch_content(KB_ID, i.get("media_id",""))
+                ls = llm_score(i.get("title",""), content)
+                sc = ls[1] if ls else score(i.get("title",""),[t])[1]
+            else:
+                sc = score(i.get("title",""),[t])[1]
+            d["_s"]=sc; grp[t].append(d)
     if not grp: return
+    
+    # 标签分布 TOP5
+    tag_counts = sorted([(t,len(v)) for t,v in grp.items()], key=lambda x:-x[1])[:5]
+    # 均分 TOP5
+    tag_avgs = sorted([(t,round(mean(i["_s"] for i in v),2)) for t,v in grp.items()], key=lambda x:-x[1])[:5]
+    
+    # 随机标签（保留）
     tag=random.choice(list(grp))
     its=sorted(grp[tag], key=lambda x:-x["_s"])
     av=round(mean(i["_s"] for i in its),2)
     print(f"选中: {tag} ({len(its)}条, 均分{av})")
-    l=[f"\n## {TODAY} 月度分析\n{tag}: {len(its)}条, 均分{av}/10\n"]
+    
+    l=[f"\n## {TODAY} 月度分析\n时间: {NOW} | 模式: {'LLM' if llm_ok() else '规则'}\n总条目: {len(all_i)} | 标签类别: {len(grp)}\n"]
+    
+    l.append("\n### 📊 标签分布 TOP5\n")
+    for t,c in tag_counts: l.append(f"- {t}: {c}条")
+    
+    l.append("\n### ⭐ 均分 TOP5 标签\n")
+    for t,sc in tag_avgs: l.append(f"- {t}: {sc}/10")
+    
+    l.append(f"\n### 🎲 随机选中: {tag}（共{len(its)}条, 均分{av}）\n")
     for i in its[:5]: l.append(f"- {i['title'][:60]} ⭐{i['_s']}")
+    
     append_note(DAILY_LOG_NOTE_ID, "\n".join(l))
     update_status("最后月度分析时间",NOW)
+    
+    fl = [f"⏰ {NOW}", f"{'LLM' if llm_ok() else '规则'}模式", f"📊 总: {len(all_i)} | 标签: {len(grp)}类", ""]
+    fl.append("📊 标签分布TOP5:")
+    for t,c in tag_counts: fl.append(f"  {t}: {c}条")
+    fl.append("")
+    fl.append("⭐ 均分TOP5:")
+    for t,sc in tag_avgs: fl.append(f"  {t}: {sc}")
+    fl.append("")
+    fl.append(f"🎲 随机聚焦: {tag} ({av})")
+    for i in its[:2]: fl.append(f"  {i['title'][:40]} ⭐{i['_s']}")
+    feishu("📈 月度分析", fl)
 
 if __name__=="__main__":
     mode=sys.argv[1] if len(sys.argv)>1 else "daily"
