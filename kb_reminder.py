@@ -233,6 +233,7 @@ def daily():
         if tagged_items:
             recall = random.choice(tagged_items)
             _, sc = score(recall["title"], recall["tags"])
+            print(f"💡 随机回顾: {recall['title'][:50]} | {'/'.join(recall['tags'][:3])} ⭐{sc}")
             fl.append("")
             fl.append("💡 随机回顾:")
             fl.append(f"  {recall['title'][:50]}")
