@@ -209,7 +209,11 @@ def daily():
     print(f"Downloads: {len(list_items(KB_ID, DOWNLOADS_FOLDER_ID))}")
     untagged = [{"media_id":m,"title":v["title"]} for m,v in titles.items() if v["mt"]!=99 and not v["tags"]]
     print(f"未处理: {len(untagged)}")
-    if not untagged: print("无新增"); update_status("最后盘点时间",NOW); return
+    if not untagged:
+        print("无新增")
+        update_status("最后盘点时间",NOW)
+        feishu("📋 每日盘点", [f"⏰ {NOW}", f"🤖 {'LLM' if llm_ok() else '规则'}模式", f"📊 总: {len(titles)}", "✅ 无新增未处理条目"])
+        return
 
     results, tc = [], 0
     llm_on = llm_ok()
