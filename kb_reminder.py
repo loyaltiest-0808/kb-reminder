@@ -227,7 +227,21 @@ def daily():
     if not untagged:
         print("无新增")
         update_status("最后盘点时间",NOW)
-        feishu("📋 每日盘点", [f"⏰ {NOW}", f"🤖 {'LLM' if llm_ok() else '规则'}模式", f"📊 总: {len(titles)}", "✅ 无新增未处理条目"])
+        fl = [f"⏰ {NOW}", f"🤖 {'LLM' if llm_ok() else '规则'}模式", f"📊 总: {len(titles)}", "✅ 无新增未处理条目"]
+        # 随机知识点回顾
+        tagged_items = [{"media_id":m,"title":v["title"],"tags":v["tags"]} for m,v in titles.items() if v["mt"]!=99 and v["tags"]]
+        if tagged_items:
+            recall = random.choice(tagged_items)
+            _, sc = score(recall["title"], recall["tags"])
+            fl.append("")
+            fl.append("💡 随机回顾:")
+            fl.append(f"  {recall['title'][:50]}")
+            fl.append(f"  标签: {'/'.join(recall['tags'][:3])} ⭐{sc}")
+            if llm_ok():
+                content = fetch_content(KB_ID, recall["media_id"])
+                sm = llm_summarize(recall["title"], content)
+                if sm: fl.append(f"  📝 {sm[:80]}")
+        feishu("📋 每日盘点", fl)
         return
 
     results, tc = [], 0
@@ -273,6 +287,21 @@ def daily():
         json.dump({"date":TODAY,"mode":"llm" if llm_on else "rule","count":len(results),"avg":avg,"items":results}, f, ensure_ascii=False, indent=2)
     fl = [f"⏰ {NOW}", f"{'LLM' if llm_on else '规则'}模式", f"总: {len(titles)}", f"新增: {len(results)}", f"均分: {avg}"]
     if results: fl.append(f"TOP1: {results[0]['title'][:40]} ⭐{results[0]['total']}" + (f"\n📝{results[0].get('summary','')[:60]}" if results[0].get('summary') else ""))
+    
+    # 随机知识点回顾：从有标签的条目中抽一条
+    tagged_items = [{"media_id":m,"title":v["title"],"tags":v["tags"]} for m,v in titles.items() if v["mt"]!=99 and v["tags"]]
+    if tagged_items:
+        recall = random.choice(tagged_items)
+        _, sc = score(recall["title"], recall["tags"])
+        fl.append("")
+        fl.append("💡 随机回顾:")
+        fl.append(f"  {recall['title'][:50]}")
+        fl.append(f"  标签: {'/'.join(recall['tags'][:3])} ⭐{sc}")
+        if llm_on:
+            content = fetch_content(KB_ID, recall["media_id"])
+            sm = llm_summarize(recall["title"], content)
+            if sm: fl.append(f"  📝 {sm[:80]}")
+    
     feishu("每日盘点完成", fl)
 
 def run_nightly(): print(f"夜间入库 — {NOW}"); daily()
