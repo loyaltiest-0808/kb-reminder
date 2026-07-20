@@ -128,7 +128,8 @@ def list_items(kb_id, folder_id=""):
     """旧版API：cursor分页"""
     all_items, cursor = [], ""
     while True:
-        b = {"knowledge_base_id": kb_id, "folder_id": folder_id, "cursor": cursor, "limit": 50}
+        b = {"knowledge_base_id": kb_id, "cursor": cursor, "limit": 50}
+        if folder_id: b["folder_id"] = folder_id
         d = api("openapi/wiki/v1/get_knowledge_list", b).get("data", {})
         items = d.get("knowledge_list", [])
         all_items.extend(items)
