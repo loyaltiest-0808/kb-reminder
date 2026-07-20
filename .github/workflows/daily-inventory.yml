@@ -1,7 +1,7 @@
 name: 每日盘点
 on:
   schedule:
-    - cron: '0 13 * * *'
+    - cron: '0 2 * * *'
   workflow_dispatch:
 jobs:
   daily-inventory:
