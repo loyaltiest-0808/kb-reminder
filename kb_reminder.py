@@ -115,34 +115,49 @@ def api(path, body):
     c,k = cred()
     r = requests.post(f"{BASE_URL}/{path}",
         headers={"ima-openapi-clientid":c,"ima-openapi-apikey":k,"Content-Type":"application/json"},
-        json=body, timeout=30).json()
-    if r.get("code")!=0: print(f"API错误 [{path}]: {r.get('msg','')}")
-    return r
+        json=body, timeout=30)
+    try:
+        data = r.json()
+    except:
+        print(f"API响应非JSON [{path}]: HTTP {r.status_code}, body={r.text[:200]}")
+        return {"code": -1, "msg": "响应非JSON", "data": {}}
+    if data.get("code")!=0: print(f"API错误 [{path}]: {data.get('msg','')}")
+    return data
 
-def list_items(kb_id, folder_id=None):
-    page, all_items = 1, []
+def list_items(kb_id, folder_id=""):
+    """旧版API：cursor分页"""
+    all_items, cursor = [], ""
     while True:
-        b = {"knowledge_base_id":kb_id,"page_size":50,"page_num":page}
-        if folder_id: b["parent_folder_id"] = folder_id
-        d = api("openapi/wiki/v1/list_knowledge", b).get("data",{})
-        items = d.get("knowledge_list",[])
-        if not items: break
+        b = {"knowledge_base_id": kb_id, "folder_id": folder_id, "cursor": cursor, "limit": 50}
+        d = api("openapi/wiki/v1/get_knowledge_list", b).get("data", {})
+        items = d.get("knowledge_list", [])
         all_items.extend(items)
-        if len(all_items) >= d.get("total_count",0): break
-        page += 1
+        if d.get("is_end", True): break
+        cursor = d.get("next_cursor", "")
+        time.sleep(0.5)
     return all_items
 
-def tag_add(kb_id, media_id, tag): api("openapi/wiki/v1/add_tag", {"knowledge_base_id":kb_id,"media_id":media_id,"tag_name":tag})
-def append_note(nid, c): api("openapi/wiki/v1/append_note", {"note_id":nid,"content":c})
-def rename_item(kb_id, mid, name): api("openapi/wiki/v1/rename_knowledge", {"knowledge_base_id":kb_id,"media_id":mid,"name":name})
+def tag_add(kb_id, item_id, tag):
+    """旧版API：item_id 而非 media_id"""
+    api("openapi/wiki/v1/tag_add", {"knowledge_base_id":kb_id,"item_id":item_id,"tag_name":tag})
+
+def append_note(nid, content):
+    """旧版API：openapi/note/v1/append_doc + doc_id + content_format"""
+    api("openapi/note/v1/append_doc", {"doc_id":nid,"content":content,"content_format":1})
+
+def rename_item(kb_id, mid, name):
+    api("openapi/wiki/v1/rename_knowledge", {"knowledge_base_id":kb_id,"media_id":mid,"name":name})
 
 def fetch_content(kb_id, media_id):
     try:
-        r = api("openapi/wiki/v1/search_knowledge", {"knowledge_base_id":kb_id,"keyword":"","media_ids":[media_id],"page_size":1})
-        its = r.get("data",{}).get("knowledge_list",[])
-        if its: return its[0].get("summary","") or its[0].get("description","") or ""
+        r = api("openapi/wiki/v1/search_knowledge", {"knowledge_base_id":kb_id,"query":"","cursor":"","limit":50})
+        return r.get("data",{}).get("summary","") or ""
     except: pass
     return ""
+
+def search_item(kb_id, keyword):
+    """旧版搜索API"""
+    return api("openapi/wiki/v1/search_knowledge", {"knowledge_base_id":kb_id,"query":keyword,"cursor":"","limit":50})
 
 # ==================== 通知 ====================
 def feishu(title, lines):
