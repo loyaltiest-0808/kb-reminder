@@ -162,8 +162,13 @@ def search_item(kb_id, keyword):
 # ==================== 通知 ====================
 def feishu(title, lines):
     try:
-        requests.post(FEISHU_WEBHOOK, json={"msg_type":"interactive","card":{"header":{"title":{"tag":"plain_text","content":title},"template":"blue"},"elements":[{"tag":"div","text":{"tag":"plain_text","content":l}} for l in lines]}}, timeout=10)
-    except: pass
+        r = requests.post(FEISHU_WEBHOOK, json={"msg_type":"interactive","card":{"header":{"title":{"tag":"plain_text","content":title},"template":"blue"},"elements":[{"tag":"div","text":{"tag":"plain_text","content":l}} for l in lines]}}, timeout=10)
+        if r.status_code==200:
+            print(f"飞书通知已发送: {title}")
+        else:
+            print(f"飞书通知失败: HTTP {r.status_code}")
+    except Exception as e:
+        print(f"飞书通知异常: {e}")
 
 def update_status(f, v):
     append_note(SYSTEM_STATUS_NOTE_ID, f"\n{TODAY} - {f}: {v}")
