@@ -1,7 +1,7 @@
 name: 周回顾
 on:
   schedule:
-    - cron: '0 20 * * 5'
+    - cron: '0 12 * * 5'
   workflow_dispatch:
 jobs:
   weekly-review:
@@ -18,3 +18,4 @@ jobs:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           USE_LLM_ENHANCE: ${{ vars.USE_LLM_ENHANCE }}
         run: python kb_reminder.py weekly
+
