@@ -1,8 +1,10 @@
 name: 月度分析
+
 on:
   schedule:
     - cron: '0 2 28-31 * 6'
   workflow_dispatch:
+
 jobs:
   monthly-analysis:
     runs-on: ubuntu-latest
@@ -17,5 +19,4 @@ jobs:
           IMA_OPENAPI_APIKEY: ${{ secrets.IMA_OPENAPI_APIKEY }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           USE_LLM_ENHANCE: ${{ vars.USE_LLM_ENHANCE }}
-        run: python kb_reminder.py monthly
-
+        run: cd /sandbox/workspace/kb-reminder && python3 monthly_wrapup.py
