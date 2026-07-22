@@ -331,8 +331,9 @@ def run_weekly():
     for i,s in enumerate(sel,1):
         title = s.get("title","")[:40]
         tags = s.get("tags",[])
-        _, sc = llm_score(title, "") if llm_on else (None, 0)
-        if not _: _, sc = score(title, tags)
+        ls = llm_score(title, "") if llm_on else None
+        if ls: _, sc, _ = ls
+        else: _, sc = score(title, tags)
         fl.append(f"{i}. {title} ⭐{sc}")
     feishu("📊 周回顾", fl)
 
