@@ -1,66 +1,79 @@
-# 知识库定时盘点系统
+# 📚 知识库三级归档系统（新架构）
 
-基于 GitHub Actions + IMA OpenAPI 的自动化知识库管理工具。
+## 架构概览
 
-## 4 个定时任务
-
-| 任务 | 调度时间 | 说明 |
-|------|---------|------|
-| 每日盘点 | 每天 21:00 | 扫描新增条目 → 分类打标签 → 五维评分 → 写入日志 |
-| 周回顾 | 每周五 20:00 | 本周知识库概况与标签分布统计 |
-| 月度分析 | 月末周六 20:00 | 全量条目评分汇总与趋势分析 |
-| 夜间入库 | 每天 00:10 | 增量导入与预处理 |
-
-## 部署步骤
-
-### 第一步：获取 IMA API 凭证
-
-1. 打开 https://ima.qq.com/agent-interface
-2. 登录你的 ima 账号
-3. 获取 **Client ID** 和 **API Key**
-
-### 第二步：创建 GitHub 仓库
-
-1. 在 GitHub 上创建一个新仓库（私有/公开均可）
-2. 把本目录所有文件推送到仓库
-
-```bash
-cd kb-reminder
-git init
-git add .
-git commit -m "初始化知识库定时盘点系统"
-git remote add origin 你的仓库地址
-git push -u origin main
+```
+┌─────────────┐     实时追加      ┌──────────────┐
+│  每日入库   │ ───────────────▶  │  周卡片笔记   │  ← 日常实时追加
+└─────────────┘                    └──────────────┘
+                                              ↓
+                                    周收尾（周日晚）
+                                              ↓
+                                    ┌──────────────┐
+                                    │  已封存周归档  │
+                                    └──────────────┘
+                                              ↓
+                                    月汇总（月底）
+                                              ↓
+                                    ┌──────────────┐
+                                    │  月度分析笔记  │
+                                    └──────────────┘
 ```
 
-### 第三步：配置 GitHub Secrets
+## 核心改变
 
-在仓库设置 → Secrets and variables → Actions 中添加：
+**旧架构**：每日盘点 → 本地文件 → 周汇总转换 → 推送笔记  
+**新架构**：每日盘点 → **直接追加到周卡片笔记** → 周收尾补统计 → 月汇总
 
-| Secret 名称 | 值 |
-|------------|-----|
-| `IMA_OPENAPI_CLIENTID` | 你的 Client ID |
-| `IMA_OPENAPI_APIKEY` | 你的 API Key |
+优势：
+1. ✅ 数据流转更简单，无中间冗余文件
+2. ✅ 周归档实时可见，无需等待周底转换
+3. ✅ 定时任务只做"收尾统计"，不做"内容转换"
+4. ✅ 代码量减少 60%，维护成本低
 
-### 第四步：激活工作流
+## 文件说明
 
-推送代码后，GitHub Actions 会自动识别 `.github/workflows/` 下的 4 个 workflow 文件。你可以在 Actions 标签页中手动触发测试。
+| 文件 | 职责 | 执行时机 |
+|:-----|:-----|:---------|
+| `daily_inventory.py` | 新研报入库 → 五维评分 → 追加周卡片 → 更新每日日志 | 每日 20:50 |
+| `weekly_wrapup.py` | 补周汇总统计 → 标注封存 → 创建下周空白笔记 | 每周日 23:00 |
+| `monthly_wrapup.py` | 汇总本月所有周卡片 → 生成月度分析 | 每月最后一天 23:00 |
+| `scoring.py` | 五维评分算法、卡片渲染 | 库模块 |
+| `note_api.py` | IMA笔记API封装 | 库模块 |
+| `config/constants.py` | ID常量、标签基准分 | 配置 |
+| `state/current_week_note_id` | 当前周笔记ID缓存 | 状态文件 |
 
-## 关键 ID（请勿修改）
-
-- 知识库 kb_id: `28RoKuOA8h1pcBxomcac8BUYQF0lqvuxeNQ1X3dtbu0=`
-- 每日盘点日志笔记: `7483148258522158`
-- 系统状态笔记: `7483148258537130`
-- Downloads 文件夹: `folder_7482703326763920`
-
-## 本地测试
+## 定时任务配置
 
 ```bash
-export IMA_OPENAPI_CLIENTID="你的client_id"
-export IMA_OPENAPI_APIKEY="你的api_key"
-pip install -r requirements.txt
-python kb_reminder.py daily    # 测试每日盘点
-python kb_reminder.py weekly   # 测试周回顾
-python kb_reminder.py monthly  # 测试月度分析
-python kb_reminder.py nightly  # 测试夜间入库
+# crontab
+50 20 * * * cd /sandbox/workspace/kb-reminder && python3 daily_inventory.py
+0 23 * * 0 cd /sandbox/workspace/kb-reminder && python3 weekly_wrapup.py
+0 23 28-31 * * [ "$(date +\%d -d tomorrow)" = "01" ] && cd /sandbox/workspace/kb-reminder && python3 monthly_wrapup.py
+```
+
+## 使用方法
+
+```bash
+# 1. 每日入库（在研报识别脚本中调用）
+python3 -c "
+from daily_inventory import process_batch
+items = [('标题', ['标签1', '标签2'], '文件名.pdf')]
+process_batch(items, '2026-07-22')
+"
+
+# 2. 手动触发周收尾
+python3 weekly_wrapup.py
+
+# 3. 手动触发月汇总
+python3 monthly_wrapup.py
+```
+
+## 沙箱重置后恢复
+
+```bash
+# 1. 恢复评分逻辑（来自笔记 7483572432682694）
+# 2. 恢复配置文件中的ID常量
+# 3. 删除 state/current_week_note_id（会自动重新发现）
+# 4. 测试 API 连接正常
 ```
