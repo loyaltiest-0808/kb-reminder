@@ -20,10 +20,19 @@ STATE_FILE = "state/current_week_note_id"
 FEISHU_WEBHOOK = os.environ.get("FEISHU_WEBHOOK", "")
 
 
-def send_feishu_notification(batch_date, count, avg_score, max_score, min_score, top3_titles):
-    """发送飞书通知（可选）"""
+def send_feishu_notification(batch_date, count, avg_score, max_score, min_score, top3_titles, scores_summary):
+    """发送飞书每日盘点通知"""
     if not FEISHU_WEBHOOK:
-        return  # 没配置就不通知
+        return
+
+    # 生成每条研报详情
+    items_detail = ""
+    for item in scores_summary:
+        num = item["num"]
+        title = item["title"]
+        tags = "、".join(item["tags"])
+        total = item["total"]
+        items_detail += f"{num}. **{title}**\n   标签: {tags}　评分: **{total}**\n"
 
     msg = {
         "msg_type": "interactive",
@@ -33,10 +42,11 @@ def send_feishu_notification(batch_date, count, avg_score, max_score, min_score,
                 "template": "blue"
             },
             "elements": [
-                {"tag": "div", "text": {"tag": "lark_md", "content": f"**📦 处理研报：**{count} 条\n**📈 平均分：**{avg_score}\n**🔥 最高分：**{max_score}\n**❄️ 最低分：**{min_score}"}},
-                {"tag": "div", "text": {"tag": "lark_md", "content": f"**🏆 TOP3：**\n{top3_titles}"}},
+                {"tag": "div", "text": {"tag": "lark_md", "content": f"**📦 研报明细**\n{items_detail}"}},
                 {"tag": "hr"},
-                {"tag": "note", "element": [{"tag": "plain_text", "content": f"三级归档系统 v2.0 · {datetime.now().strftime('%H:%M')}"}]}
+                {"tag": "div", "text": {"tag": "lark_md", "content": f"**汇总**　共 {count} 条　平均 {avg_score}　最高 {max_score}　最低 {min_score}"}},
+                {"tag": "hr"},
+                {"tag": "note", "element": [{"tag": "plain_text", "content": f"📋 三级归档系统 · 每日盘点 · {datetime.now().strftime('%m/%d %H:%M')}"}]}
             ]
         }
     }
@@ -176,7 +186,7 @@ def process_batch(items, batch_date=None):
     print(f"   最低分: {min_score}")
     
     # 飞书通知
-    send_feishu_notification(batch_date, len(items), avg_score, max_score, min_score, top3_titles)
+    send_feishu_notification(batch_date, len(items), avg_score, max_score, min_score, top3_titles, scores_summary)
     
     return True
 
