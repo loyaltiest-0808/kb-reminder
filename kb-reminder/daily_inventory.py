@@ -133,8 +133,8 @@ def process_batch(items, batch_date=None):
         "avg": avg_score,
         "items": scores_summary
     }
-    os.makedirs("/sandbox/workspace/outputs", exist_ok=True)
-    with open(f"/sandbox/workspace/outputs/evaluation_{batch_date}.json", "w") as f:
+    os.makedirs("outputs", exist_ok=True)
+    with open(f"outputs/evaluation_{batch_date}.json", "w") as f:
         json.dump(output, f, ensure_ascii=False, indent=2)
     
     print(f"\n🎉 批次处理完成！")
