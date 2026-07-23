@@ -79,9 +79,65 @@ def extract_keywords(title):
     return keywords[:5]
 
 
-def extract_summary(title):
-    """从标题生成一句话概要"""
-    if "系列" in title and "之" in title:
-        parts = title.split("：")
-        return parts[-1] if len(parts) > 1 else title
-    return title
+def extract_summary(title, tags=None):
+    """从标题和标签生成50-80字段落式概要"""
+    if tags is None:
+        tags = []
+    
+    tag_str = "、".join(tags) if tags else "金融"
+    t = title
+    
+    # 尝试解析标题结构
+    # 格式：XXX，基于YYY 或 XXX ——基于YYY
+    main_part = t
+    method_part = ""
+    if "，" in t:
+        parts = t.split("，", 1)
+        main_part = parts[0]
+        method_part = parts[1]
+    elif "——" in t:
+        parts = t.split("——", 1)
+        main_part = parts[0]
+        method_part = parts[1]
+    elif "—" in t:
+        parts = t.split("—", 1)
+        main_part = parts[0]
+        method_part = parts[1]
+    
+    # 构建概要
+    if "基于" in t:
+        # 标题含"基于"：本文基于[方法]，研究[目标]在[标签]领域的应用...
+        prefix = t.split("基于", 1)[0] if "基于" in t.split("，")[0] if "，" in t else t.split("基于")[0] else ""
+        core = t.split("基于", 1)[1] if "基于" in t else t
+        core = core.replace("的", "的")
+        summary = f"本文围绕{prefix}方向，基于{core}方法进行系统性研究。从{tag_str}角度出发，为相关投资决策提供了定量分析支持与实证参考。"
+    
+    elif "如何" in t:
+        summary = f"本文聚焦「{t}」这一核心问题，从{tag_str}维度进行了系统性探讨。通过构建量化分析框架，为实际投资场景提供了可落地的解决方案。"
+    
+    elif "研究" in t or "分析" in t:
+        target = t.replace("研究", "").replace("分析", "")
+        summary = f"本文对{target}领域进行了深入研究，综合运用{tag_str}方法论。通过系统性的实证检验，揭示了关键规律并提出了具操作性的投资策略建议。"
+    
+    elif "应用" in t or "实践" in t:
+        summary = f"本文聚焦{t}方向，探讨了{tag_str}在实际金融场景中的应用方法与效果。通过案例与数据分析，验证了相关策略的有效性与局限性。"
+    
+    else:
+        # 通用模板
+        summary = f"本文属于{tag_str}方向的最新研究成果，系统探讨了{t}。通过多维度的定量分析与方法创新，为投资决策提供了富有价值的参考框架。"
+    
+    # 截断到50-80字
+    if len(summary) < 50:
+        summary += f"研究内容涵盖{tag_str}核心领域，具有较好的理论与实践参考价值。"
+    if len(summary) > 80:
+        # 找到第75个字左右的句号位置截断
+        cut = 75
+        while cut < len(summary) and cut < 82:
+            if summary[cut] in "。！？":
+                summary = summary[:cut+1]
+                break
+            cut += 1
+        if len(summary) > 82:
+            summary = summary[:78] + "。"
+    
+    return summary
