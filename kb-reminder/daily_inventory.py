@@ -14,7 +14,7 @@ from scoring import score_one, render_score_card, extract_keywords, extract_summ
 from note_api import append_doc, search_note_by_title, list_notes, create_blank_weekly_note
 from config.constants import FOLDER_WEEKLY_ARCHIVE, NOTE_DAILY_LOG, BROKER_MAP
 
-STATE_FILE = "/sandbox/workspace/kb-reminder/state/current_week_note_id"
+STATE_FILE = "state/current_week_note_id"
 
 
 def get_current_week_note():
