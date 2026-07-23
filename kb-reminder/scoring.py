@@ -106,10 +106,12 @@ def extract_summary(title, tags=None):
     
     # 构建概要
     if "基于" in t:
-        # 标题含"基于"：本文基于[方法]，研究[目标]在[标签]领域的应用...
-        prefix = t.split("基于", 1)[0] if "基于" in t.split("，")[0] if "，" in t else t.split("基于")[0] else ""
-        core = t.split("基于", 1)[1] if "基于" in t else t
-        core = core.replace("的", "的")
+        # 标题含"基于"：本文围绕[方向]，基于[方法]进行系统性研究...
+        if "，" in t and "基于" in t.split("，")[0]:
+            prefix = t.split("基于", 1)[0]
+        else:
+            prefix = t.split("基于", 1)[0]
+        core = t.split("基于", 1)[1]
         summary = f"本文围绕{prefix}方向，基于{core}方法进行系统性研究。从{tag_str}角度出发，为相关投资决策提供了定量分析支持与实证参考。"
     
     elif "如何" in t:
