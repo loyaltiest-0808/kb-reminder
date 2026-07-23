@@ -5,16 +5,49 @@
 2. 打标签、五维评分
 3. 直接追加到当前周卡片笔记（而不是本地文件）
 4. 更新每日盘点日志（摘要版表格）
+5. 飞书通知
 """
 import os
 import sys
 import json
 from datetime import datetime
+from urllib import request as urllib_request
 from scoring import score_one, render_score_card, extract_keywords, extract_summary
 from note_api import append_doc, search_note_by_title, list_notes, create_blank_weekly_note
 from config.constants import FOLDER_WEEKLY_ARCHIVE, NOTE_DAILY_LOG, BROKER_MAP
 
 STATE_FILE = "state/current_week_note_id"
+FEISHU_WEBHOOK = os.environ.get("FEISHU_WEBHOOK", "")
+
+
+def send_feishu_notification(batch_date, count, avg_score, max_score, min_score, top3_titles):
+    """发送飞书通知（可选）"""
+    if not FEISHU_WEBHOOK:
+        return  # 没配置就不通知
+
+    msg = {
+        "msg_type": "interactive",
+        "card": {
+            "header": {
+                "title": {"tag": "plain_text", "content": f"📊 知识库每日盘点 - {batch_date}"},
+                "template": "blue"
+            },
+            "elements": [
+                {"tag": "div", "text": {"tag": "lark_md", "content": f"**📦 处理研报：**{count} 条\n**📈 平均分：**{avg_score}\n**🔥 最高分：**{max_score}\n**❄️ 最低分：**{min_score}"}},
+                {"tag": "div", "text": {"tag": "lark_md", "content": f"**🏆 TOP3：**\n{top3_titles}"}},
+                {"tag": "hr"},
+                {"tag": "note", "element": [{"tag": "plain_text", "content": f"三级归档系统 v2.0 · {datetime.now().strftime('%H:%M')}"}]}
+            ]
+        }
+    }
+    data = json.dumps(msg).encode("utf-8")
+    req = urllib_request.Request(FEISHU_WEBHOOK, data=data, method="POST")
+    req.add_header("Content-Type", "application/json")
+    try:
+        with urllib_request.urlopen(req, timeout=10) as resp:
+            print(f"✅ 飞书通知已发送 (status={resp.status})")
+    except Exception as e:
+        print(f"⚠️ 飞书通知失败: {e}")
 
 
 def get_current_week_note():
@@ -141,6 +174,9 @@ def process_batch(items, batch_date=None):
     print(f"   平均分: {avg_score}")
     print(f"   最高分: {max_score}")
     print(f"   最低分: {min_score}")
+    
+    # 飞书通知
+    send_feishu_notification(batch_date, len(items), avg_score, max_score, min_score, top3_titles)
     
     return True
 
