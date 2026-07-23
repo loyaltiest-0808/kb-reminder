@@ -218,6 +218,7 @@ def main():
     if next_note_id:
         print(f"✅ 下周空白笔记已创建: {next_note_id}")
         # 更新状态文件
+        os.makedirs(os.path.dirname(STATE_FILE), exist_ok=True)
         with open(STATE_FILE, "w") as f:
             f.write(next_note_id)
     else:
