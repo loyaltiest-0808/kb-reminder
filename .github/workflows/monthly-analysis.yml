@@ -15,6 +15,7 @@ jobs:
         env:
           IMA_OPENAPI_CLIENTID: ${{ secrets.IMA_OPENAPI_CLIENTID }}
           IMA_OPENAPI_APIKEY: ${{ secrets.IMA_OPENAPI_APIKEY }}
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
         run: cd kb-reminder && python3 monthly_wrapup.py
       - uses: actions/upload-artifact@v4
         if: always()
