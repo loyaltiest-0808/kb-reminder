@@ -17,6 +17,7 @@ jobs:
           IMA_OPENAPI_APIKEY: ${{ secrets.IMA_OPENAPI_APIKEY }}
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           USE_LLM_ENHANCE: ${{ vars.USE_LLM_ENHANCE }}
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK }}
         run: cd kb-reminder && python3 daily_inventory.py
       - uses: actions/upload-artifact@v4
         if: always()
