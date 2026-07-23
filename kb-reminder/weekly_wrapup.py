@@ -22,22 +22,55 @@ FEISHU_WEBHOOK = os.environ.get("FEISHU_WEBHOOK", "")
 
 
 def send_feishu_weekly(start, end, count, avg, med, count_8_plus, top_tag, all_items):
-    """发送飞书周报通知"""
+    """发送飞书周报通知（每条8分+研报独立卡片）"""
     if not FEISHU_WEBHOOK:
         return
     
-    # 8分+ 卡片列表
     high_score_items = [x for x in all_items if x["total"] >= 8.0]
-    high_cards = ""
+    
+    elements = [
+        {
+            "tag": "div",
+            "text": {
+                "tag": "lark_md",
+                "content": f"**📊 本周概览**\n研报总数: {count} 条　平均分: {avg}　中位数: {med}\n8分+优质研报: {count_8_plus} 条　最佳标签: {top_tag[0]} ({top_tag[1]})"
+            }
+        },
+        {"tag": "hr"}
+    ]
+    
     if high_score_items:
         for item in high_score_items:
             title = item["title"]
             total = item["total"]
             tags = " / ".join(item["tags"])
             summary = item.get("summary", title)
-            high_cards += f"**⭐ {total} {title}**\n> 🏷️ {tags}\n> {summary}\n\n"
+            elements.append({
+                "tag": "div",
+                "text": {
+                    "tag": "lark_md",
+                    "content": f"**⭐ {total} {title}**\n🏷️ {tags}"
+                }
+            })
+            elements.append({
+                "tag": "div",
+                "text": {
+                    "tag": "lark_md",
+                    "content": f"> {summary}"
+                }
+            })
+            elements.append({"tag": "hr"})
     else:
-        high_cards = "本周暂无8分+优质研报"
+        elements.append({
+            "tag": "div",
+            "text": {"tag": "lark_md", "content": "本周暂无8分+优质研报"}
+        })
+        elements.append({"tag": "hr"})
+    
+    elements.append({
+        "tag": "note",
+        "element": [{"tag": "plain_text", "content": f"📋 三级归档系统 · 周度盘点 · {datetime.now().strftime('%m/%d %H:%M')}"}]
+    })
     
     msg = {
         "msg_type": "interactive",
@@ -46,13 +79,7 @@ def send_feishu_weekly(start, end, count, avg, med, count_8_plus, top_tag, all_i
                 "title": {"tag": "plain_text", "content": f"📈 周度研报盘点 - {start} ~ {end}"},
                 "template": "purple"
             },
-            "elements": [
-                {"tag": "div", "text": {"tag": "lark_md", "content": f"**📊 本周概览**\n研报总数: {count} 条　平均分: {avg}　中位数: {med}\n8分+优质研报: {count_8_plus} 条　最佳标签: {top_tag[0]} ({top_tag[1]})"}},
-                {"tag": "hr"},
-                {"tag": "div", "text": {"tag": "lark_md", "content": f"**🏆 8分+优质研报列表**\n\n{high_cards}"}},
-                {"tag": "hr"},
-                {"tag": "note", "element": [{"tag": "plain_text", "content": f"📋 三级归档系统 · 周度盘点 · {datetime.now().strftime('%m/%d %H:%M')}"}]}
-            ]
+            "elements": elements
         }
     }
     data = json.dumps(msg).encode("utf-8")
