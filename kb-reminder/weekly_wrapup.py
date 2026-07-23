@@ -13,10 +13,42 @@ import json
 import glob
 from datetime import datetime, timedelta
 from statistics import mean, median
+from urllib import request as urllib_request
 from note_api import append_doc, rename_note, create_blank_weekly_note, list_notes
 from config.constants import FOLDER_WEEKLY_ARCHIVE
 
 STATE_FILE = "state/current_week_note_id"
+FEISHU_WEBHOOK = os.environ.get("FEISHU_WEBHOOK", "")
+
+
+def send_feishu_weekly(start, end, count, avg, med, count_8_plus, top_tag):
+    """发送飞书周报通知"""
+    if not FEISHU_WEBHOOK:
+        return
+    msg = {
+        "msg_type": "interactive",
+        "card": {
+            "header": {
+                "title": {"tag": "plain_text", "content": f"📈 周度研报盘点 - {start} ~ {end}"},
+                "template": "purple"
+            },
+            "elements": [
+                {"tag": "div", "text": {"tag": "lark_md", "content": f"**📊 本周概览**\n研报总数: **{count}** 条　平均分: **{avg}**　中位数: **{med}**\n8分+优质研报: **{count_8_plus}** 条　最佳标签: **{top_tag[0]}** ({top_tag[1]})"}},
+                {"tag": "hr"},
+                {"tag": "div", "text": {"tag": "lark_md", "content": "*本周数据已封存归档，下周内容将计入新的周归档笔记。*"}},
+                {"tag": "hr"},
+                {"tag": "note", "element": [{"tag": "plain_text", "content": f"📋 三级归档系统 · 周度盘点 · {datetime.now().strftime('%m/%d %H:%M')}"}]}
+            ]
+        }
+    }
+    data = json.dumps(msg).encode("utf-8")
+    req = urllib_request.Request(FEISHU_WEBHOOK, data=data, method="POST")
+    req.add_header("Content-Type", "application/json")
+    try:
+        with urllib_request.urlopen(req, timeout=10) as resp:
+            print(f"✅ 飞书周报已发送 (status={resp.status})")
+    except Exception as e:
+        print(f"⚠️ 飞书周报失败: {e}")
 
 
 def get_this_week_dates():
@@ -142,6 +174,24 @@ def main():
         print("⚠️ 下周空白笔记创建失败")
     
     print("\n🎉 周收尾完成！")
+    
+    # 飞书通知
+    if items:
+        scores = [x["total"] for x in items]
+        avg_score = round(mean(scores), 2)
+        med_score = round(median(scores), 1)
+        count_8_plus = sum(1 for s in scores if s >= 8.0)
+        tag_scores = {}
+        for item in items:
+            for tag in item["tags"]:
+                if tag not in tag_scores:
+                    tag_scores[tag] = []
+                tag_scores[tag].append(item["total"])
+        top_tag = max({t: round(mean(vs), 2) for t, vs in tag_scores.items()}.items(), key=lambda x: x[1])
+        send_feishu_weekly(start, end, len(items), avg_score, med_score, count_8_plus, top_tag)
+    else:
+        send_feishu_weekly(start, end, 0, 0, 0, 0, ("", 0))
+    
     return True
 
 
