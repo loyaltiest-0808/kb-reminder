@@ -1,0 +1,24 @@
+name: 月度分析
+on:
+  schedule:
+    - cron: '0 3 1 * *'
+  workflow_dispatch:
+jobs:
+  monthly-analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r kb-reminder/requirements.txt
+      - name: 执行
+        env:
+          IMA_OPENAPI_CLIENTID: ${{ secrets.IMA_OPENAPI_CLIENTID }}
+          IMA_OPENAPI_APIKEY: ${{ secrets.IMA_OPENAPI_APIKEY }}
+        run: cd kb-reminder && python3 monthly_wrapup.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: monthly-${{ github.run_id }}
+          path: kb-reminder/outputs/
