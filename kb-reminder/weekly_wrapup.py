@@ -21,10 +21,24 @@ STATE_FILE = "state/current_week_note_id"
 FEISHU_WEBHOOK = os.environ.get("FEISHU_WEBHOOK", "")
 
 
-def send_feishu_weekly(start, end, count, avg, med, count_8_plus, top_tag):
+def send_feishu_weekly(start, end, count, avg, med, count_8_plus, top_tag, all_items):
     """发送飞书周报通知"""
     if not FEISHU_WEBHOOK:
         return
+    
+    # 8分+ 卡片列表
+    high_score_items = [x for x in all_items if x["total"] >= 8.0]
+    high_cards = ""
+    if high_score_items:
+        for item in high_score_items:
+            title = item["title"]
+            total = item["total"]
+            tags = " / ".join(item["tags"])
+            summary = item.get("summary", title)
+            high_cards += f"**⭐ {total} {title}**\n> 🏷️ {tags}\n> {summary}\n\n"
+    else:
+        high_cards = "本周暂无8分+优质研报"
+    
     msg = {
         "msg_type": "interactive",
         "card": {
@@ -33,9 +47,9 @@ def send_feishu_weekly(start, end, count, avg, med, count_8_plus, top_tag):
                 "template": "purple"
             },
             "elements": [
-                {"tag": "div", "text": {"tag": "lark_md", "content": f"**📊 本周概览**\n研报总数: **{count}** 条　平均分: **{avg}**　中位数: **{med}**\n8分+优质研报: **{count_8_plus}** 条　最佳标签: **{top_tag[0]}** ({top_tag[1]})"}},
+                {"tag": "div", "text": {"tag": "lark_md", "content": f"**📊 本周概览**\n研报总数: {count} 条　平均分: {avg}　中位数: {med}\n8分+优质研报: {count_8_plus} 条　最佳标签: {top_tag[0]} ({top_tag[1]})"}},
                 {"tag": "hr"},
-                {"tag": "div", "text": {"tag": "lark_md", "content": "*本周数据已封存归档，下周内容将计入新的周归档笔记。*"}},
+                {"tag": "div", "text": {"tag": "lark_md", "content": f"**🏆 8分+优质研报列表**\n\n{high_cards}"}},
                 {"tag": "hr"},
                 {"tag": "note", "element": [{"tag": "plain_text", "content": f"📋 三级归档系统 · 周度盘点 · {datetime.now().strftime('%m/%d %H:%M')}"}]}
             ]
@@ -188,9 +202,9 @@ def main():
                     tag_scores[tag] = []
                 tag_scores[tag].append(item["total"])
         top_tag = max({t: round(mean(vs), 2) for t, vs in tag_scores.items()}.items(), key=lambda x: x[1])
-        send_feishu_weekly(start, end, len(items), avg_score, med_score, count_8_plus, top_tag)
+        send_feishu_weekly(start, end, len(items), avg_score, med_score, count_8_plus, top_tag, items)
     else:
-        send_feishu_weekly(start, end, 0, 0, 0, 0, ("", 0))
+        send_feishu_weekly(start, end, 0, 0, 0, 0, ("", 0), [])
     
     return True
 
