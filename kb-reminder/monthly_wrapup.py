@@ -11,8 +11,46 @@ import glob
 from datetime import datetime
 from statistics import mean, median
 from collections import Counter
+from urllib import request as urllib_request
 from note_api import append_doc, list_notes, export_note
 from config.constants import FOLDER_MONTHLY_ARCHIVE
+
+FEISHU_WEBHOOK = os.environ.get("FEISHU_WEBHOOK", "")
+
+
+def send_feishu_monthly(month, count, avg, top5_tags, top3_items):
+    """发送飞书月报通知"""
+    if not FEISHU_WEBHOOK:
+        return
+    top3_str = ""
+    for i, item in enumerate(top3_items, 1):
+        top3_str += f"{i}. **{item['title'][:25]}** — {item['total']}分\n"
+    tags_str = "、".join([f"{t}({c})" for t, c in top5_tags])
+    msg = {
+        "msg_type": "interactive",
+        "card": {
+            "header": {
+                "title": {"tag": "plain_text", "content": f"📊 {month}月度研报分析"},
+                "template": "green"
+            },
+            "elements": [
+                {"tag": "div", "text": {"tag": "lark_md", "content": f"**📦 研报总数:** {count} 条　**📈 平均分:** {avg}"}},
+                {"tag": "div", "text": {"tag": "lark_md", "content": f"**🏷️ 热门标签TOP5**\n{tags_str}"}},
+                {"tag": "hr"},
+                {"tag": "div", "text": {"tag": "lark_md", "content": f"**🏆 高分榜TOP3**\n{top3_str}"}},
+                {"tag": "hr"},
+                {"tag": "note", "element": [{"tag": "plain_text", "content": f"📋 三级归档系统 · 月度分析 · {datetime.now().strftime('%m/%d %H:%M')}"}]}
+            ]
+        }
+    }
+    data = json.dumps(msg).encode("utf-8")
+    req = urllib_request.Request(FEISHU_WEBHOOK, data=data, method="POST")
+    req.add_header("Content-Type", "application/json")
+    try:
+        with urllib_request.urlopen(req, timeout=10) as resp:
+            print(f"✅ 飞书月报已发送 (status={resp.status})")
+    except Exception as e:
+        print(f"⚠️ 飞书月报失败: {e}")
 
 
 def get_this_month_weekly_notes():
@@ -136,6 +174,15 @@ def main():
         return False
     
     print(f"\n🎉 {month_name}汇总完成！")
+    
+    # 飞书通知
+    scores = [x["total"] for x in items]
+    avg_score = round(mean(scores), 2)
+    all_tags = [t for item in items for t in item["tags"]]
+    top5_tags = Counter(all_tags).most_common(5)
+    top3_items = sorted(items, key=lambda x: -x["total"])[:3]
+    send_feishu_monthly(month_name, len(items), avg_score, top5_tags, top3_items)
+    
     return True
 
 
