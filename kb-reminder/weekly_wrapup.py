@@ -22,11 +22,13 @@ FEISHU_WEBHOOK = os.environ.get("FEISHU_WEBHOOK", "")
 
 
 def send_feishu_weekly(start, end, count, avg, med, count_8_plus, top_tag, all_items):
-    """发送飞书周报通知（每条8分+研报独立卡片）"""
+    """发送飞书周报通知（8分+全卡片，其余标题+评分+标签）"""
     if not FEISHU_WEBHOOK:
         return
     
-    high_score_items = [x for x in all_items if x["total"] >= 8.0]
+    all_sorted = sorted(all_items, key=lambda x: -x["total"])
+    high_score_items = [x for x in all_sorted if x["total"] >= 8.0]
+    low_score_items = [x for x in all_sorted if x["total"] < 8.0]
     
     elements = [
         {
@@ -39,6 +41,7 @@ def send_feishu_weekly(start, end, count, avg, med, count_8_plus, top_tag, all_i
         {"tag": "hr"}
     ]
     
+    # 8分+：完整卡片
     if high_score_items:
         for item in high_score_items:
             title = item["title"]
@@ -60,10 +63,16 @@ def send_feishu_weekly(start, end, count, avg, med, count_8_plus, top_tag, all_i
                 }
             })
             elements.append({"tag": "hr"})
-    else:
+    
+    # 8分以下：标题+评分+标签（无概要）
+    if low_score_items:
+        rest_text = "**📋 其他研报**\n"
+        for item in low_score_items:
+            tags = " / ".join(item["tags"])
+            rest_text += f"• **{item['title']}** ⭐ {item['total']}　🏷️ {tags}\n"
         elements.append({
             "tag": "div",
-            "text": {"tag": "lark_md", "content": "本周暂无8分+优质研报"}
+            "text": {"tag": "lark_md", "content": rest_text}
         })
         elements.append({"tag": "hr"})
     
