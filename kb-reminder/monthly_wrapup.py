@@ -31,7 +31,7 @@ def get_this_month_weekly_notes():
 def collect_this_month_scores():
     """收集本月所有评分数据"""
     all_items = []
-    outputs_dir = "/sandbox/workspace/outputs"
+    outputs_dir = "outputs"
     this_month = datetime.now().strftime("%Y-%m")
     
     for f in sorted(glob.glob(f"{outputs_dir}/evaluation_*.json")):
