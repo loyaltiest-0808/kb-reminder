@@ -136,7 +136,7 @@ def process_batch(items, batch_date=None):
         broker, clean_title = parse_filename(filename)
         dims, total = score_one(title, tags)
         keywords = extract_keywords(title)
-        summary = extract_summary(title)
+        summary = extract_summary(title, tags)
         
         card = render_score_card(i, clean_title, broker, tags, keywords, dims, summary)
         cards.append(card)
