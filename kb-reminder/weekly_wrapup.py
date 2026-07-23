@@ -31,7 +31,7 @@ def collect_this_week_scores():
     """收集本周所有批次的评分"""
     all_items = []
     # 读取本周的所有 evaluation_*.json
-    outputs_dir = "/sandbox/workspace/outputs"
+    outputs_dir = "outputs"
     for f in glob.glob(f"{outputs_dir}/evaluation_*.json"):
         with open(f) as fp:
             data = json.load(fp)
