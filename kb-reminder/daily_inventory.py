@@ -21,18 +21,19 @@ FEISHU_WEBHOOK = os.environ.get("FEISHU_WEBHOOK", "")
 
 
 def send_feishu_notification(batch_date, count, avg_score, max_score, min_score, top3_titles, scores_summary):
-    """发送飞书每日盘点通知"""
+    """发送飞书每日盘点通知（卡片格式）"""
     if not FEISHU_WEBHOOK:
         return
 
-    # 生成每条研报详情
-    items_detail = ""
+    # 生成每条研报的卡片
+    items_cards = ""
     for item in scores_summary:
         num = item["num"]
         title = item["title"]
-        tags = "、".join(item["tags"])
+        tags = " / ".join(item["tags"])
         total = item["total"]
-        items_detail += f"{num}. **{title}**\n   标签: {tags}　评分: **{total}**\n"
+        summary = item.get("summary", title)
+        items_cards += f"**№{num} {title}** | ⭐ {total} | 🏷️ {tags}\n> {summary}\n\n"
 
     msg = {
         "msg_type": "interactive",
@@ -42,9 +43,9 @@ def send_feishu_notification(batch_date, count, avg_score, max_score, min_score,
                 "template": "blue"
             },
             "elements": [
-                {"tag": "div", "text": {"tag": "lark_md", "content": f"**📦 研报明细**\n{items_detail}"}},
+                {"tag": "div", "text": {"tag": "lark_md", "content": f"**📦 研报卡片**（共{count}条）\n\n{items_cards}"}},
                 {"tag": "hr"},
-                {"tag": "div", "text": {"tag": "lark_md", "content": f"**汇总**　共 {count} 条　平均 {avg_score}　最高 {max_score}　最低 {min_score}"}},
+                {"tag": "div", "text": {"tag": "lark_md", "content": f"**汇总**　平均 {avg_score}　最高 {max_score}　最低 {min_score}"}},
                 {"tag": "hr"},
                 {"tag": "note", "element": [{"tag": "plain_text", "content": f"📋 三级归档系统 · 每日盘点 · {datetime.now().strftime('%m/%d %H:%M')}"}]}
             ]
@@ -141,7 +142,7 @@ def process_batch(items, batch_date=None):
         cards.append(card)
         total_scores.append(total)
         scores_summary.append({
-            "num": i, "title": clean_title, "tags": tags, "total": total
+            "num": i, "title": clean_title, "tags": tags, "total": total, "summary": summary
         })
     
     # 追加到周笔记
