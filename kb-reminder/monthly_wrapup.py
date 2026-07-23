@@ -18,14 +18,21 @@ from config.constants import FOLDER_MONTHLY_ARCHIVE
 FEISHU_WEBHOOK = os.environ.get("FEISHU_WEBHOOK", "")
 
 
-def send_feishu_monthly(month, count, avg, top5_tags, top3_items):
-    """发送飞书月报通知"""
+def send_feishu_monthly(month, count, avg, top5_tags, top5_items):
+    """发送飞书月报通知（卡片格式）"""
     if not FEISHU_WEBHOOK:
         return
-    top3_str = ""
-    for i, item in enumerate(top3_items, 1):
-        top3_str += f"{i}. **{item['title'][:25]}** — {item['total']}分\n"
     tags_str = "、".join([f"{t}({c})" for t, c in top5_tags])
+    
+    # 高分榜前5卡片
+    top5_cards = ""
+    for i, item in enumerate(top5_items, 1):
+        title = item["title"]
+        total = item["total"]
+        tags = " / ".join(item["tags"])
+        summary = item.get("summary", title)
+        top5_cards += f"**🥇 №{i} {title}** | ⭐ {total} | 🏷️ {tags}\n> {summary}\n\n"
+    
     msg = {
         "msg_type": "interactive",
         "card": {
@@ -37,7 +44,7 @@ def send_feishu_monthly(month, count, avg, top5_tags, top3_items):
                 {"tag": "div", "text": {"tag": "lark_md", "content": f"**📦 研报总数:** {count} 条　**📈 平均分:** {avg}"}},
                 {"tag": "div", "text": {"tag": "lark_md", "content": f"**🏷️ 热门标签TOP5**\n{tags_str}"}},
                 {"tag": "hr"},
-                {"tag": "div", "text": {"tag": "lark_md", "content": f"**🏆 高分榜TOP3**\n{top3_str}"}},
+                {"tag": "div", "text": {"tag": "lark_md", "content": f"**🏆 高分榜TOP5**\n\n{top5_cards}"}},
                 {"tag": "hr"},
                 {"tag": "note", "element": [{"tag": "plain_text", "content": f"📋 三级归档系统 · 月度分析 · {datetime.now().strftime('%m/%d %H:%M')}"}]}
             ]
@@ -180,8 +187,8 @@ def main():
     avg_score = round(mean(scores), 2)
     all_tags = [t for item in items for t in item["tags"]]
     top5_tags = Counter(all_tags).most_common(5)
-    top3_items = sorted(items, key=lambda x: -x["total"])[:3]
-    send_feishu_monthly(month_name, len(items), avg_score, top5_tags, top3_items)
+    top5_items = sorted(items, key=lambda x: -x["total"])[:5]
+    send_feishu_monthly(month_name, len(items), avg_score, top5_tags, top5_items)
     
     return True
 
