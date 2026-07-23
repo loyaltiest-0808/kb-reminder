@@ -16,7 +16,7 @@ from statistics import mean, median
 from note_api import append_doc, rename_note, create_blank_weekly_note, list_notes
 from config.constants import FOLDER_WEEKLY_ARCHIVE
 
-STATE_FILE = "/sandbox/workspace/kb-reminder/state/current_week_note_id"
+STATE_FILE = "state/current_week_note_id"
 
 
 def get_this_week_dates():
