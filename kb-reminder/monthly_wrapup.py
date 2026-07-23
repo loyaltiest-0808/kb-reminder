@@ -4,6 +4,7 @@
 1. 读取本月所有周卡片笔记内容
 2. 生成本月分析总结
 3. 汇总到月度笔记
+4. 飞书通知：TOP5卡片 + 其余精简 + 热门研究方向
 """
 import os
 import json
@@ -16,10 +17,52 @@ from note_api import append_doc, list_notes, export_note
 from config.constants import FOLDER_MONTHLY_ARCHIVE
 
 FEISHU_WEBHOOK = os.environ.get("FEISHU_WEBHOOK", "")
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 
 
-def send_feishu_monthly(month, count, avg, top5_tags, top5_items):
-    """发送飞书月报通知（每条TOP5研报独立卡片）"""
+def fetch_hot_research_directions(tags):
+    """调用DeepSeek API根据热门标签生成当前研究方向"""
+    if not DEEPSEEK_API_KEY:
+        return ""
+    
+    tag_names = [t for t, _ in tags]
+    prompt = f"""你是一位量化金融研究员。基于以下本月最热门的5个研究标签：
+{'、'.join(tag_names)}
+
+请从专业研报和财经新闻视角，列出当前这些方向下的3-5个热门研究课题/方向。
+每个方向用一句话描述（30字以内）。
+格式要求：序号+方向名称+简短说明，每行一条。
+无需开头语和结尾语。"""
+
+    payload = json.dumps({
+        "model": "deepseek-chat",
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 300,
+        "temperature": 0.3
+    }).encode("utf-8")
+
+    req = urllib_request.Request(
+        "https://api.deepseek.com/v1/chat/completions",
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {DEEPSEEK_API_KEY}"
+        },
+        method="POST"
+    )
+    try:
+        with urllib_request.urlopen(req, timeout=15) as resp:
+            result = json.loads(resp.read())
+            content = result["choices"][0]["message"]["content"].strip()
+            print("✅ 热门研究方向已生成")
+            return content
+    except Exception as e:
+        print(f"⚠️ 研究方向生成失败: {e}")
+        return ""
+
+
+def send_feishu_monthly(month, count, avg, top5_tags, top5_items, rest_items, hot_directions):
+    """发送飞书月报通知（TOP5卡片 + 其余精简 + 热门研究方向）"""
     if not FEISHU_WEBHOOK:
         return
     tags_str = "、".join([f"{t}({c})" for t, c in top5_tags])
@@ -42,6 +85,7 @@ def send_feishu_monthly(month, count, avg, top5_tags, top5_items):
         {"tag": "hr"}
     ]
     
+    # TOP5完整卡片
     for i, item in enumerate(top5_items, 1):
         title = item["title"]
         total = item["total"]
@@ -60,6 +104,29 @@ def send_feishu_monthly(month, count, avg, top5_tags, top5_items):
             "text": {
                 "tag": "lark_md",
                 "content": f"> {summary}"
+            }
+        })
+        elements.append({"tag": "hr"})
+    
+    # 其余精简展示
+    if rest_items:
+        rest_text = "**📋 其他研报**\n"
+        for item in rest_items:
+            tags = " / ".join(item["tags"])
+            rest_text += f"• **{item['title']}** ⭐ {item['total']}　🏷️ {tags}\n"
+        elements.append({
+            "tag": "div",
+            "text": {"tag": "lark_md", "content": rest_text}
+        })
+        elements.append({"tag": "hr"})
+    
+    # 热门研究方向
+    if hot_directions:
+        elements.append({
+            "tag": "div",
+            "text": {
+                "tag": "lark_md",
+                "content": f"**🔬 当前市场热门研究方向**\n{hot_directions}"
             }
         })
         elements.append({"tag": "hr"})
@@ -216,8 +283,14 @@ def main():
     avg_score = round(mean(scores), 2)
     all_tags = [t for item in items for t in item["tags"]]
     top5_tags = Counter(all_tags).most_common(5)
-    top5_items = sorted(items, key=lambda x: -x["total"])[:5]
-    send_feishu_monthly(month_name, len(items), avg_score, top5_tags, top5_items)
+    sorted_items = sorted(items, key=lambda x: -x["total"])
+    top5_items = sorted_items[:5]
+    rest_items = sorted_items[5:]
+    
+    # 生成热门研究方向
+    hot_directions = fetch_hot_research_directions(top5_tags)
+    
+    send_feishu_monthly(month_name, len(items), avg_score, top5_tags, top5_items, rest_items, hot_directions)
     
     return True
 
