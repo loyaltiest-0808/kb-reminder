@@ -21,32 +21,66 @@ FEISHU_WEBHOOK = os.environ.get("FEISHU_WEBHOOK", "")
 
 
 def send_feishu_notification(batch_date, count, avg_score, max_score, min_score, top3_titles, scores_summary):
-    """发送飞书每日盘点通知（每条研报独立卡片）"""
+    """发送飞书每日盘点通知（>5条时前5展示卡片，其余仅标题+评分）"""
     if not FEISHU_WEBHOOK:
         return
 
-    # 每条研报单独成卡
+    # 按评分降序排列
+    sorted_items = sorted(scores_summary, key=lambda x: -x["total"])
+    
     elements = []
-    for item in scores_summary:
-        num = item["num"]
-        title = item["title"]
-        tags = " / ".join(item["tags"])
-        total = item["total"]
-        summary = item.get("summary", title)
+    
+    if count <= 5:
+        # ≤5条：全部展示完整卡片
+        for item in sorted_items:
+            title = item["title"]
+            tags = " / ".join(item["tags"])
+            total = item["total"]
+            summary = item.get("summary", title)
+            rank = sorted_items.index(item) + 1
+            elements.append({
+                "tag": "div",
+                "text": {
+                    "tag": "lark_md",
+                    "content": f"**№{rank} {title}**　⭐ **{total}**\n🏷️ {tags}"
+                }
+            })
+            elements.append({
+                "tag": "div",
+                "text": {"tag": "lark_md", "content": f"> {summary}"}
+            })
+            elements.append({"tag": "hr"})
+    else:
+        # >5条：TOP5完整卡片，其余精简
+        top5 = sorted_items[:5]
+        rest = sorted_items[5:]
         
+        for item in top5:
+            title = item["title"]
+            tags = " / ".join(item["tags"])
+            total = item["total"]
+            summary = item.get("summary", title)
+            rank = top5.index(item) + 1
+            elements.append({
+                "tag": "div",
+                "text": {
+                    "tag": "lark_md",
+                    "content": f"**🏆 №{rank} {title}**　⭐ **{total}**\n🏷️ {tags}"
+                }
+            })
+            elements.append({
+                "tag": "div",
+                "text": {"tag": "lark_md", "content": f"> {summary}"}
+            })
+            elements.append({"tag": "hr"})
+        
+        # 其余精简展示
+        rest_text = "**📋 其他入库研报**\n"
+        for i, item in enumerate(rest, 6):
+            rest_text += f"• №{i} **{item['title']}** ⭐ {item['total']}\n"
         elements.append({
             "tag": "div",
-            "text": {
-                "tag": "lark_md",
-                "content": f"**№{num} {title}**　⭐ **{total}**\n🏷️ {tags}"
-            }
-        })
-        elements.append({
-            "tag": "div",
-            "text": {
-                "tag": "lark_md",
-                "content": f"> {summary}"
-            }
+            "text": {"tag": "lark_md", "content": rest_text}
         })
         elements.append({"tag": "hr"})
     
