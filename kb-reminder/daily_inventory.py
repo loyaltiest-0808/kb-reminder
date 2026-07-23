@@ -21,19 +21,48 @@ FEISHU_WEBHOOK = os.environ.get("FEISHU_WEBHOOK", "")
 
 
 def send_feishu_notification(batch_date, count, avg_score, max_score, min_score, top3_titles, scores_summary):
-    """发送飞书每日盘点通知（卡片格式）"""
+    """发送飞书每日盘点通知（每条研报独立卡片）"""
     if not FEISHU_WEBHOOK:
         return
 
-    # 生成每条研报的卡片
-    items_cards = ""
+    # 每条研报单独成卡
+    elements = []
     for item in scores_summary:
         num = item["num"]
         title = item["title"]
         tags = " / ".join(item["tags"])
         total = item["total"]
         summary = item.get("summary", title)
-        items_cards += f"**№{num} {title}** | ⭐ {total} | 🏷️ {tags}\n> {summary}\n\n"
+        
+        elements.append({
+            "tag": "div",
+            "text": {
+                "tag": "lark_md",
+                "content": f"**№{num} {title}**　⭐ **{total}**\n🏷️ {tags}"
+            }
+        })
+        elements.append({
+            "tag": "div",
+            "text": {
+                "tag": "lark_md",
+                "content": f"> {summary}"
+            }
+        })
+        elements.append({"tag": "hr"})
+    
+    # 汇总行
+    elements.append({
+        "tag": "div",
+        "text": {
+            "tag": "lark_md",
+            "content": f"**汇总**　共 {count} 条　平均 {avg_score}　最高 {max_score}　最低 {min_score}"
+        }
+    })
+    elements.append({"tag": "hr"})
+    elements.append({
+        "tag": "note",
+        "element": [{"tag": "plain_text", "content": f"📋 三级归档系统 · 每日盘点 · {datetime.now().strftime('%m/%d %H:%M')}"}]
+    })
 
     msg = {
         "msg_type": "interactive",
@@ -42,13 +71,7 @@ def send_feishu_notification(batch_date, count, avg_score, max_score, min_score,
                 "title": {"tag": "plain_text", "content": f"📊 知识库每日盘点 - {batch_date}"},
                 "template": "blue"
             },
-            "elements": [
-                {"tag": "div", "text": {"tag": "lark_md", "content": f"**📦 研报卡片**（共{count}条）\n\n{items_cards}"}},
-                {"tag": "hr"},
-                {"tag": "div", "text": {"tag": "lark_md", "content": f"**汇总**　平均 {avg_score}　最高 {max_score}　最低 {min_score}"}},
-                {"tag": "hr"},
-                {"tag": "note", "element": [{"tag": "plain_text", "content": f"📋 三级归档系统 · 每日盘点 · {datetime.now().strftime('%m/%d %H:%M')}"}]}
-            ]
+            "elements": elements
         }
     }
     data = json.dumps(msg).encode("utf-8")
