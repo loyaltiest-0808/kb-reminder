@@ -19,19 +19,55 @@ FEISHU_WEBHOOK = os.environ.get("FEISHU_WEBHOOK", "")
 
 
 def send_feishu_monthly(month, count, avg, top5_tags, top5_items):
-    """发送飞书月报通知（卡片格式）"""
+    """发送飞书月报通知（每条TOP5研报独立卡片）"""
     if not FEISHU_WEBHOOK:
         return
     tags_str = "、".join([f"{t}({c})" for t, c in top5_tags])
     
-    # 高分榜前5卡片
-    top5_cards = ""
+    elements = [
+        {
+            "tag": "div",
+            "text": {
+                "tag": "lark_md",
+                "content": f"**📦 研报总数:** {count} 条　**📈 平均分:** {avg}"
+            }
+        },
+        {
+            "tag": "div",
+            "text": {
+                "tag": "lark_md",
+                "content": f"**🏷️ 热门标签TOP5**\n{tags_str}"
+            }
+        },
+        {"tag": "hr"}
+    ]
+    
     for i, item in enumerate(top5_items, 1):
         title = item["title"]
         total = item["total"]
         tags = " / ".join(item["tags"])
         summary = item.get("summary", title)
-        top5_cards += f"**🥇 №{i} {title}** | ⭐ {total} | 🏷️ {tags}\n> {summary}\n\n"
+        medal = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"][i-1]
+        elements.append({
+            "tag": "div",
+            "text": {
+                "tag": "lark_md",
+                "content": f"{medal} **№{i} {title}**　⭐ **{total}**\n🏷️ {tags}"
+            }
+        })
+        elements.append({
+            "tag": "div",
+            "text": {
+                "tag": "lark_md",
+                "content": f"> {summary}"
+            }
+        })
+        elements.append({"tag": "hr"})
+    
+    elements.append({
+        "tag": "note",
+        "element": [{"tag": "plain_text", "content": f"📋 三级归档系统 · 月度分析 · {datetime.now().strftime('%m/%d %H:%M')}"}]
+    })
     
     msg = {
         "msg_type": "interactive",
@@ -40,14 +76,7 @@ def send_feishu_monthly(month, count, avg, top5_tags, top5_items):
                 "title": {"tag": "plain_text", "content": f"📊 {month}月度研报分析"},
                 "template": "green"
             },
-            "elements": [
-                {"tag": "div", "text": {"tag": "lark_md", "content": f"**📦 研报总数:** {count} 条　**📈 平均分:** {avg}"}},
-                {"tag": "div", "text": {"tag": "lark_md", "content": f"**🏷️ 热门标签TOP5**\n{tags_str}"}},
-                {"tag": "hr"},
-                {"tag": "div", "text": {"tag": "lark_md", "content": f"**🏆 高分榜TOP5**\n\n{top5_cards}"}},
-                {"tag": "hr"},
-                {"tag": "note", "element": [{"tag": "plain_text", "content": f"📋 三级归档系统 · 月度分析 · {datetime.now().strftime('%m/%d %H:%M')}"}]}
-            ]
+            "elements": elements
         }
     }
     data = json.dumps(msg).encode("utf-8")
